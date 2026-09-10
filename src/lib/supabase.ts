@@ -1,7 +1,9 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-const url = import.meta.env.VITE_SUPABASE_URL
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+// `|| undefined` garante fallback mesmo quando a variável existe porém vazia
+// (ex.: definida sem valor no painel da Vercel).
+const url = import.meta.env.VITE_SUPABASE_URL?.trim() || undefined
+const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() || undefined
 
 /**
  * Indica se as variáveis de ambiente do Supabase estão configuradas.
