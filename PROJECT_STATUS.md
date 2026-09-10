@@ -5,17 +5,21 @@ Empresa: **MR ELÉTRICA**
 
 ## CHECKPOINT ATUAL
 
-**Checkpoint 24 — Equipe (técnico + ajudante) + IA real de texto** · 🟢 CONCLUÍDO
+**Checkpoint 25 — Foto no material · Forma de cobrança · Lucro e margem** · 🟢 CONCLUÍDO
 
 App publicado na Vercel e conectado ao Supabase real
 (`or-amentos-da-mr-eletrica.vercel.app` / projeto `fuwsmbzrhxyolhvznglp`).
 
-CP24 adiciona o lançamento de **técnico + ajudante juntos** na mão de obra
-(serviço, orçamento e PDFs) e o provedor de IA `edge` (Google Gemini gratuito
-via Edge Function, com fallback para o gerador local). Build e lint sem erros.
+- **CP24** — técnico + ajudante juntos na mão de obra + provedor de IA `edge` (Gemini).
+- **CP25** — foto no cadastro de material; forma de cobrança da mão de obra
+  (por hora / por diária / valor fechado); lucro e margem calculados na hora
+  no serviço e no orçamento; foto do serviço pode ser movida entre categorias.
+
+Build e lint sem erros.
 
 **Pendências no Supabase (usuário):**
 1. Rodar `supabase/migrations/20260910120000_equipe_tecnico_ajudante.sql`
+   **e** `supabase/migrations/20260910130000_material_foto_cobranca_lucro.sql`
    (ou `setup-completo.sql` de novo — idempotente).
 2. (Opcional) publicar a Edge Function `gerar-descricao` + secret `GEMINI_API_KEY`
    — ver `supabase/functions/gerar-descricao/README.md`.

@@ -53,6 +53,8 @@ export async function createServico(input: NovoServico): Promise<ServicoRow> {
       quantidade_ajudantes: input.quantidade_ajudantes ?? 0,
       horas_ajudantes: input.horas_ajudantes ?? 0,
       valor_hora_ajudante: input.valor_hora_ajudante ?? 0,
+      forma_cobranca: input.forma_cobranca ?? 'hora',
+      custo_mao_de_obra: input.custo_mao_de_obra ?? 0,
       valor_mao_de_obra: input.valor_mao_de_obra ?? 0,
       taxa_deslocamento: input.taxa_deslocamento ?? 0,
       outros_custos: input.outros_custos ?? 0,

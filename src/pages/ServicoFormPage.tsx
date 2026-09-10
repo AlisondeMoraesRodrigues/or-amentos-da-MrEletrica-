@@ -13,6 +13,8 @@ import { listClientes } from '@/services/clientesService'
 import { getConfiguracao } from '@/services/configuracoesService'
 import { createServico, getServico, updateServico, type NovoServico } from '@/services/servicosService'
 import {
+  FORMA_COBRANCA_META,
+  FORMA_COBRANCA_ORDEM,
   SERVICO_STATUS_META,
   SERVICO_STATUS_ORDEM,
   TIPO_HORA_META,
@@ -20,15 +22,17 @@ import {
   valorHoraDaConfig,
 } from '@/config/servico'
 import { calcularMaoDeObra } from '@/utils/maoDeObra'
+import { calcularLucro } from '@/utils/lucro'
 import { AIService } from '@/services/aiService'
-import { formatCurrency } from '@/utils/format'
-import type { ServicoStatus, TipoHora } from '@/types/database'
+import { formatCurrency, formatNumber } from '@/utils/format'
+import type { FormaCobranca, ServicoStatus, TipoHora } from '@/types/database'
 
 type Campos = {
   cliente_id: string
   descricao: string
   descricao_livre: string
   data_servico: string
+  forma_cobranca: FormaCobranca
   quantidade_tecnicos: string
   horas_trabalhadas: string
   tipo_hora: TipoHora
@@ -36,6 +40,8 @@ type Campos = {
   quantidade_ajudantes: string
   horas_ajudantes: string
   valor_hora_ajudante: string
+  valor_fechado: string
+  custo_mao_de_obra: string
   taxa_deslocamento: string
   outros_custos: string
   status: ServicoStatus
@@ -48,6 +54,7 @@ const VAZIO: Campos = {
   descricao: '',
   descricao_livre: '',
   data_servico: HOJE,
+  forma_cobranca: 'hora',
   quantidade_tecnicos: '1',
   horas_trabalhadas: '',
   tipo_hora: 'tecnica',
@@ -55,6 +62,8 @@ const VAZIO: Campos = {
   quantidade_ajudantes: '0',
   horas_ajudantes: '',
   valor_hora_ajudante: '',
+  valor_fechado: '',
+  custo_mao_de_obra: '',
   taxa_deslocamento: '',
   outros_custos: '',
   status: 'aberto',
@@ -102,11 +111,13 @@ export default function ServicoFormPage() {
           setErroCarga('Serviço não encontrado.')
           return
         }
+        const forma = s.forma_cobranca ?? 'hora'
         setCampos({
           cliente_id: s.cliente_id ?? '',
           descricao: s.descricao ?? '',
           descricao_livre: s.descricao_livre ?? '',
           data_servico: s.data_servico ?? '',
+          forma_cobranca: forma,
           quantidade_tecnicos: String(s.quantidade_tecnicos ?? 1),
           horas_trabalhadas: String(s.horas_trabalhadas ?? ''),
           tipo_hora: s.tipo_hora,
@@ -114,6 +125,8 @@ export default function ServicoFormPage() {
           quantidade_ajudantes: String(s.quantidade_ajudantes ?? 0),
           horas_ajudantes: s.horas_ajudantes ? String(s.horas_ajudantes) : '',
           valor_hora_ajudante: s.valor_hora_ajudante ? String(s.valor_hora_ajudante) : '',
+          valor_fechado: forma === 'fechado' && s.valor_mao_de_obra ? String(s.valor_mao_de_obra) : '',
+          custo_mao_de_obra: s.custo_mao_de_obra ? String(s.custo_mao_de_obra) : '',
           taxa_deslocamento: s.taxa_deslocamento ? String(s.taxa_deslocamento) : '',
           outros_custos: s.outros_custos ? String(s.outros_custos) : '',
           status: s.status,
@@ -138,6 +151,8 @@ export default function ServicoFormPage() {
     if (!apoio) return null
     return calcularMaoDeObra(
       {
+        forma: campos.forma_cobranca,
+        valorFechado: num(campos.valor_fechado),
         tecnicos: {
           quantidade: num(campos.quantidade_tecnicos),
           horas: num(campos.horas_trabalhadas),
@@ -156,6 +171,8 @@ export default function ServicoFormPage() {
     )
   }, [
     apoio,
+    campos.forma_cobranca,
+    campos.valor_fechado,
     campos.quantidade_tecnicos,
     campos.horas_trabalhadas,
     campos.tipo_hora,
@@ -170,6 +187,20 @@ export default function ServicoFormPage() {
     apoio && typeof apoio.config.valor_hora_auxiliar === 'number'
       ? apoio.config.valor_hora_auxiliar
       : 0
+
+  const formaMeta = FORMA_COBRANCA_META[campos.forma_cobranca]
+
+  // Lucro só da mão de obra (materiais entram no resultado da tela do serviço).
+  const lucroMaoDeObra = resultado
+    ? calcularLucro({
+        maoDeObraCobrada: resultado.valorMaoDeObra,
+        materiaisCobrado: 0,
+        materiaisCusto: 0,
+        deslocamento: num(campos.taxa_deslocamento),
+        outrosCustos: num(campos.outros_custos),
+        custoMaoDeObra: num(campos.custo_mao_de_obra),
+      })
+    : null
 
   async function gerarDescricao() {
     if (!campos.descricao_livre.trim()) return
@@ -212,6 +243,7 @@ export default function ServicoFormPage() {
       descricao: campos.descricao.trim(),
       descricao_livre: limpar(campos.descricao_livre),
       data_servico: campos.data_servico || null,
+      forma_cobranca: campos.forma_cobranca,
       quantidade_tecnicos: resultado.tecnicos.quantidade || 1,
       horas_trabalhadas: resultado.tecnicos.horas,
       tipo_hora: campos.tipo_hora,
@@ -219,6 +251,7 @@ export default function ServicoFormPage() {
       quantidade_ajudantes: resultado.ajudantes.quantidade,
       horas_ajudantes: resultado.ajudantes.horas,
       valor_hora_ajudante: resultado.ajudantes.valorHora,
+      custo_mao_de_obra: num(campos.custo_mao_de_obra),
       valor_mao_de_obra: resultado.valorMaoDeObra,
       taxa_deslocamento: num(campos.taxa_deslocamento),
       outros_custos: num(campos.outros_custos),
@@ -335,134 +368,182 @@ export default function ServicoFormPage() {
         <Card className="space-y-3">
           <h2 className="text-sm font-semibold text-slate-700">Mão de obra</h2>
 
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Técnicos</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TextField
-              label="Quantidade de técnicos"
-              name="quantidade_tecnicos"
-              type="number"
-              min={1}
-              inputMode="numeric"
-              value={campos.quantidade_tecnicos}
-              onChange={(e) => set('quantidade_tecnicos', e.target.value)}
-              error={erros.quantidade_tecnicos}
-            />
-            <TextField
-              label="Horas dos técnicos"
-              name="horas_trabalhadas"
-              type="number"
-              min={0}
-              step="0.5"
-              inputMode="decimal"
-              value={campos.horas_trabalhadas}
-              onChange={(e) => set('horas_trabalhadas', e.target.value)}
-              error={erros.horas_trabalhadas}
-            />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <SelectField
-              label="Tipo de hora"
-              name="tipo_hora"
-              value={campos.tipo_hora}
-              onChange={(e) => set('tipo_hora', e.target.value as TipoHora)}
-            >
-              {TIPO_HORA_ORDEM.map((t) => (
-                <option key={t} value={t}>
-                  {TIPO_HORA_META[t].label}
-                </option>
+          <div>
+            <span className="mb-1 block text-xs font-medium text-slate-500">Como cobrar?</span>
+            <div className="grid grid-cols-3 gap-2">
+              {FORMA_COBRANCA_ORDEM.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => set('forma_cobranca', f)}
+                  className={`rounded-lg px-2 py-2 text-sm font-semibold ${
+                    campos.forma_cobranca === f
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-white text-slate-600 ring-1 ring-slate-200'
+                  }`}
+                >
+                  {FORMA_COBRANCA_META[f].label}
+                </button>
               ))}
-            </SelectField>
-            <div>
-              <TextField
-                label="Valor da hora do técnico (R$) — opcional"
-                name="valor_hora_aplicado"
-                type="number"
-                min={0}
-                step="0.01"
-                inputMode="decimal"
-                value={campos.valor_hora_aplicado}
-                onChange={(e) => set('valor_hora_aplicado', e.target.value)}
-                placeholder={valorHoraConfig ? formatCurrency(valorHoraConfig) : '0,00'}
-              />
-              <p className="mt-1 text-xs text-slate-400">
-                Vazio = usa a configuração ({TIPO_HORA_META[campos.tipo_hora].label}:{' '}
-                {formatCurrency(valorHoraConfig)}).
-              </p>
             </div>
           </div>
 
-          <p className="border-t border-slate-100 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Ajudantes <span className="lowercase text-slate-300">(deixe 0 se trabalhou sozinho)</span>
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
+          {campos.forma_cobranca === 'fechado' ? (
             <TextField
-              label="Quantidade de ajudantes"
-              name="quantidade_ajudantes"
-              type="number"
-              min={0}
-              inputMode="numeric"
-              value={campos.quantidade_ajudantes}
-              onChange={(e) => set('quantidade_ajudantes', e.target.value)}
-              error={erros.quantidade_ajudantes}
-            />
-            <TextField
-              label="Horas dos ajudantes"
-              name="horas_ajudantes"
-              type="number"
-              min={0}
-              step="0.5"
-              inputMode="decimal"
-              value={campos.horas_ajudantes}
-              onChange={(e) => set('horas_ajudantes', e.target.value)}
-              error={erros.horas_ajudantes}
-            />
-          </div>
-          <div>
-            <TextField
-              label="Valor da hora do ajudante (R$) — opcional"
-              name="valor_hora_ajudante"
+              label="Valor da mão de obra (R$)"
+              name="valor_fechado"
               type="number"
               min={0}
               step="0.01"
               inputMode="decimal"
-              value={campos.valor_hora_ajudante}
-              onChange={(e) => set('valor_hora_ajudante', e.target.value)}
-              placeholder={valorHoraAjudanteConfig ? formatCurrency(valorHoraAjudanteConfig) : '0,00'}
+              value={campos.valor_fechado}
+              onChange={(e) => set('valor_fechado', e.target.value)}
             />
-            <p className="mt-1 text-xs text-slate-400">
-              Vazio = usa a configuração (Auxiliar: {formatCurrency(valorHoraAjudanteConfig)}).
-            </p>
-          </div>
+          ) : (
+            <>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Técnicos</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TextField
+                  label="Quantidade de técnicos"
+                  name="quantidade_tecnicos"
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  value={campos.quantidade_tecnicos}
+                  onChange={(e) => set('quantidade_tecnicos', e.target.value)}
+                  error={erros.quantidade_tecnicos}
+                />
+                <TextField
+                  label={`${formaMeta.unidade} dos técnicos`}
+                  name="horas_trabalhadas"
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  inputMode="decimal"
+                  value={campos.horas_trabalhadas}
+                  onChange={(e) => set('horas_trabalhadas', e.target.value)}
+                  error={erros.horas_trabalhadas}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <SelectField
+                  label="Tipo de hora"
+                  name="tipo_hora"
+                  value={campos.tipo_hora}
+                  onChange={(e) => set('tipo_hora', e.target.value as TipoHora)}
+                >
+                  {TIPO_HORA_ORDEM.map((t) => (
+                    <option key={t} value={t}>
+                      {TIPO_HORA_META[t].label}
+                    </option>
+                  ))}
+                </SelectField>
+                <div>
+                  <TextField
+                    label={`Valor da ${campos.forma_cobranca === 'diaria' ? 'diária' : 'hora'} do técnico (R$) — opcional`}
+                    name="valor_hora_aplicado"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={campos.valor_hora_aplicado}
+                    onChange={(e) => set('valor_hora_aplicado', e.target.value)}
+                    placeholder={valorHoraConfig ? formatCurrency(valorHoraConfig) : '0,00'}
+                  />
+                  <p className="mt-1 text-xs text-slate-400">
+                    Vazio = usa a configuração ({TIPO_HORA_META[campos.tipo_hora].label}:{' '}
+                    {formatCurrency(valorHoraConfig)}
+                    {campos.forma_cobranca === 'diaria' ? ' / h' : ''}).
+                  </p>
+                </div>
+              </div>
+
+              <p className="border-t border-slate-100 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Ajudantes{' '}
+                <span className="lowercase text-slate-300">(deixe 0 se trabalhou sozinho)</span>
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TextField
+                  label="Quantidade de ajudantes"
+                  name="quantidade_ajudantes"
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  value={campos.quantidade_ajudantes}
+                  onChange={(e) => set('quantidade_ajudantes', e.target.value)}
+                  error={erros.quantidade_ajudantes}
+                />
+                <TextField
+                  label={`${formaMeta.unidade} dos ajudantes`}
+                  name="horas_ajudantes"
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  inputMode="decimal"
+                  value={campos.horas_ajudantes}
+                  onChange={(e) => set('horas_ajudantes', e.target.value)}
+                  error={erros.horas_ajudantes}
+                />
+              </div>
+              <div>
+                <TextField
+                  label={`Valor da ${campos.forma_cobranca === 'diaria' ? 'diária' : 'hora'} do ajudante (R$) — opcional`}
+                  name="valor_hora_ajudante"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={campos.valor_hora_ajudante}
+                  onChange={(e) => set('valor_hora_ajudante', e.target.value)}
+                  placeholder={
+                    valorHoraAjudanteConfig ? formatCurrency(valorHoraAjudanteConfig) : '0,00'
+                  }
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Vazio = usa a configuração (Auxiliar: {formatCurrency(valorHoraAjudanteConfig)}).
+                </p>
+              </div>
+            </>
+          )}
 
           {resultado && (
             <div className="space-y-1 rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-800">
-              <div>
-                Técnicos: {resultado.tecnicos.quantidade} × {resultado.tecnicos.horas}h ×{' '}
-                {formatCurrency(resultado.tecnicos.valorHora)}
-                {resultado.tecnicos.origemValorHora === 'configuracao' && (
-                  <span className="text-brand-500"> (config.)</span>
-                )}{' '}
-                = {formatCurrency(resultado.tecnicos.subtotal)}
-              </div>
-              {resultado.ajudantes.quantidade > 0 && resultado.ajudantes.horas > 0 && (
-                <div>
-                  Ajudantes: {resultado.ajudantes.quantidade} × {resultado.ajudantes.horas}h ×{' '}
-                  {formatCurrency(resultado.ajudantes.valorHora)}
-                  {resultado.ajudantes.origemValorHora === 'configuracao' && (
-                    <span className="text-brand-500"> (config.)</span>
-                  )}{' '}
-                  = {formatCurrency(resultado.ajudantes.subtotal)}
+              {campos.forma_cobranca === 'fechado' ? (
+                <div className="font-bold">
+                  Mão de obra (valor fechado) = {formatCurrency(resultado.valorMaoDeObra)}
                 </div>
+              ) : (
+                <>
+                  <div>
+                    Técnicos: {resultado.tecnicos.quantidade} × {formatNumber(resultado.tecnicos.horas)}
+                    {formaMeta.unidadeCurta} × {formatCurrency(resultado.tecnicos.valorHora)}
+                    {resultado.tecnicos.origemValorHora === 'configuracao' && (
+                      <span className="text-brand-500"> (config.)</span>
+                    )}{' '}
+                    = {formatCurrency(resultado.tecnicos.subtotal)}
+                  </div>
+                  {resultado.ajudantes.quantidade > 0 && resultado.ajudantes.horas > 0 && (
+                    <div>
+                      Ajudantes: {resultado.ajudantes.quantidade} ×{' '}
+                      {formatNumber(resultado.ajudantes.horas)}
+                      {formaMeta.unidadeCurta} × {formatCurrency(resultado.ajudantes.valorHora)}
+                      {resultado.ajudantes.origemValorHora === 'configuracao' && (
+                        <span className="text-brand-500"> (config.)</span>
+                      )}{' '}
+                      = {formatCurrency(resultado.ajudantes.subtotal)}
+                    </div>
+                  )}
+                  <div className="border-t border-brand-200 pt-1 font-bold">
+                    Total mão de obra = {formatCurrency(resultado.valorMaoDeObra)}
+                  </div>
+                </>
               )}
-              <div className="border-t border-brand-200 pt-1 font-bold">
-                Total mão de obra = {formatCurrency(resultado.valorMaoDeObra)}
-              </div>
             </div>
           )}
         </Card>
 
         <Card className="space-y-3">
-          <h2 className="text-sm font-semibold text-slate-700">Outros custos</h2>
+          <h2 className="text-sm font-semibold text-slate-700">Custos e lucro</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <TextField
               label="Taxa de deslocamento (R$)"
@@ -475,7 +556,7 @@ export default function ServicoFormPage() {
               onChange={(e) => set('taxa_deslocamento', e.target.value)}
             />
             <TextField
-              label="Outros custos (R$)"
+              label="Outros custos cobrados (R$)"
               name="outros_custos"
               type="number"
               min={0}
@@ -485,6 +566,35 @@ export default function ServicoFormPage() {
               onChange={(e) => set('outros_custos', e.target.value)}
             />
           </div>
+          <TextField
+            label="Custo da equipe / despesas (R$) — o que você paga, não cobra"
+            name="custo_mao_de_obra"
+            type="number"
+            min={0}
+            step="0.01"
+            inputMode="decimal"
+            value={campos.custo_mao_de_obra}
+            onChange={(e) => set('custo_mao_de_obra', e.target.value)}
+          />
+          {lucroMaoDeObra && (
+            <div className="space-y-1 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              <div className="flex justify-between">
+                <span>Recebido (mão de obra + deslocamento + outros)</span>
+                <span className="font-medium">{formatCurrency(lucroMaoDeObra.receita)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Custo da equipe / despesas</span>
+                <span className="font-medium">− {formatCurrency(lucroMaoDeObra.custo)}</span>
+              </div>
+              <div className="flex justify-between border-t border-emerald-200 pt-1 font-bold">
+                <span>Lucro da mão de obra ({formatNumber(lucroMaoDeObra.margemPct, 1)}%)</span>
+                <span>{formatCurrency(lucroMaoDeObra.lucro)}</span>
+              </div>
+              <p className="text-xs text-emerald-700">
+                O lucro dos materiais aparece na tela do serviço, junto com o total geral.
+              </p>
+            </div>
+          )}
         </Card>
 
         <div className="grid gap-3 sm:grid-cols-2">

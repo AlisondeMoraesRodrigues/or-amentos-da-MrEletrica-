@@ -1,4 +1,4 @@
-import type { ConfiguracaoRow, ServicoStatus, TipoHora } from '@/types/database'
+import type { ConfiguracaoRow, FormaCobranca, ServicoStatus, TipoHora } from '@/types/database'
 
 type Tone = 'gray' | 'blue' | 'green' | 'red' | 'yellow'
 
@@ -27,6 +27,18 @@ export const TIPO_HORA_META: Record<
 }
 
 export const TIPO_HORA_ORDEM: TipoHora[] = ['tecnica', 'auxiliar', 'emergencia', 'noturna']
+
+/** Formas de cobrança da mão de obra (CP25). `unidade` rotula o campo de quantidade. */
+export const FORMA_COBRANCA_META: Record<
+  FormaCobranca,
+  { label: string; unidade: string; unidadeCurta: string }
+> = {
+  hora: { label: 'Por hora', unidade: 'Horas', unidadeCurta: 'h' },
+  diaria: { label: 'Por diária', unidade: 'Diárias', unidadeCurta: 'diária(s)' },
+  fechado: { label: 'Valor fechado', unidade: '', unidadeCurta: '' },
+}
+
+export const FORMA_COBRANCA_ORDEM: FormaCobranca[] = ['hora', 'diaria', 'fechado']
 
 /** Valor/hora da configuração para o tipo de hora informado. */
 export function valorHoraDaConfig(config: ConfiguracaoRow, tipo: TipoHora): number {

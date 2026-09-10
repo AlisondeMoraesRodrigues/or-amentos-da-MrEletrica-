@@ -1,5 +1,5 @@
 import { PdfDoc, type EmpresaPdf } from './pdfDoc'
-import { TIPO_HORA_META } from '@/config/servico'
+import { FORMA_COBRANCA_META, TIPO_HORA_META } from '@/config/servico'
 import { CATEGORIA_LABEL } from '@/services/fotosServicoService'
 import { formatCurrency, formatDate, formatNumber } from '@/utils/format'
 import type {
@@ -51,17 +51,23 @@ export async function montarOrdemServicoPdf(d: DadosServicoPdf): Promise<PdfDoc>
   pdf.secao('Cliente')
   pdf.linhas(paresCliente(d.cliente))
 
+  const forma = s.forma_cobranca ?? 'hora'
+  const un = forma === 'diaria' ? 'd' : 'h'
   pdf.secao('Serviço')
   pdf.linhas([
     ['Data', formatDate(s.data_servico ?? s.created_at)],
-    ['Técnicos', `${s.quantidade_tecnicos} — ${formatNumber(s.horas_trabalhadas)} h`],
-    ['Tipo de hora', TIPO_HORA_META[s.tipo_hora].label],
-    ...(s.quantidade_ajudantes > 0
-      ? ([['Ajudantes', `${s.quantidade_ajudantes} — ${formatNumber(s.horas_ajudantes)} h`]] as [
-          string,
-          string,
-        ][])
-      : []),
+    ['Cobrança', FORMA_COBRANCA_META[forma].label],
+    ...(forma === 'fechado'
+      ? ([] as [string, string][])
+      : ([
+          ['Técnicos', `${s.quantidade_tecnicos} — ${formatNumber(s.horas_trabalhadas)} ${un}`],
+          ['Tipo de hora', TIPO_HORA_META[s.tipo_hora].label],
+          ...(s.quantidade_ajudantes > 0
+            ? ([
+                ['Ajudantes', `${s.quantidade_ajudantes} — ${formatNumber(s.horas_ajudantes)} ${un}`],
+              ] as [string, string][])
+            : []),
+        ] as [string, string][])),
   ])
   pdf.espaco(1)
   pdf.paragrafo(s.descricao || '-')

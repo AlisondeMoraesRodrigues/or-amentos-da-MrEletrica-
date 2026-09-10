@@ -10,6 +10,7 @@ Migrations SQL do projeto.
 | `20260907120000_notas_fiscais.sql` | CP09 | `notas_fiscais` + bucket de Storage `notas-fiscais` (privado) + políticas |
 | `20260907130000_fotos_servico.sql` | CP11 | `fotos_servico` (categorias antes/durante/depois) + bucket `fotos-servicos` (privado) + políticas |
 | `20260910120000_equipe_tecnico_ajudante.sql` | CP24 | Colunas de ajudante em `servicos` + detalhe da mão de obra em `orcamentos` (técnico + ajudante). Só `alter table ... add column if not exists` — seguro rodar em banco já populado. |
+| `20260910130000_material_foto_cobranca_lucro.sql` | CP25 | Foto no material (`materiais.foto_*`), forma de cobrança da mão de obra (`servicos.forma_cobranca`, `orcamentos.mo_forma_cobranca`: hora/diária/fechado) e `servicos.custo_mao_de_obra` para lucro. Só `add column if not exists` + `check`. |
 
 ## Tabelas
 

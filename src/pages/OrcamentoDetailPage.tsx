@@ -15,8 +15,10 @@ import { getConfiguracao } from '@/services/configuracoesService'
 import { gerarPixCopiaECola, gerarPixQrDataUrl, pixConfigurado } from '@/services/pixService'
 import { baixarBlob, compartilharArquivo, linkWhatsApp } from '@/utils/download'
 import { ORCAMENTO_STATUS_META, ORCAMENTO_STATUS_ORDEM } from '@/config/orcamento'
+import { FORMA_COBRANCA_META } from '@/config/servico'
 import { totalMateriaisCobrado } from '@/utils/orcamento'
-import { formatCurrency, formatDate } from '@/utils/format'
+import { calcularLucro } from '@/utils/lucro'
+import { formatCurrency, formatDate, formatNumber } from '@/utils/format'
 import type { ClienteRow, OrcamentoRow, OrcamentoStatus } from '@/types/database'
 
 interface Detalhe {
@@ -140,6 +142,18 @@ export default function OrcamentoDetailPage() {
 
   const { orcamento: o, cliente } = data
   const meta = ORCAMENTO_STATUS_META[o.status]
+  const forma = o.mo_forma_cobranca ?? 'hora'
+  const unidadeMo = forma === 'diaria' ? 'd' : 'h'
+  const lucro = calcularLucro({
+    maoDeObraCobrada: o.valor_mao_de_obra,
+    materiaisCobrado: totalMateriaisCobrado({
+      valorMateriais: o.valor_materiais,
+      valorMargemMateriais: o.valor_margem_materiais,
+    }),
+    materiaisCusto: o.valor_materiais,
+    deslocamento: o.valor_deslocamento,
+    outrosCustos: o.outros_custos,
+  })
 
   return (
     <div className="space-y-4">
@@ -193,12 +207,12 @@ export default function OrcamentoDetailPage() {
         {o.mo_qtd_tecnicos > 0 || o.mo_qtd_ajudantes > 0 ? (
           <>
             <Linha
-              rotulo={`Mão de obra — técnicos (${o.mo_qtd_tecnicos}×${o.mo_horas_tecnicos}h)`}
+              rotulo={`Mão de obra — técnicos (${o.mo_qtd_tecnicos}×${formatNumber(o.mo_horas_tecnicos)}${unidadeMo})`}
               valor={formatCurrency(o.mo_qtd_tecnicos * o.mo_horas_tecnicos * o.mo_valor_hora_tecnico)}
             />
             {o.mo_qtd_ajudantes > 0 && (
               <Linha
-                rotulo={`Mão de obra — ajudantes (${o.mo_qtd_ajudantes}×${o.mo_horas_ajudantes}h)`}
+                rotulo={`Mão de obra — ajudantes (${o.mo_qtd_ajudantes}×${formatNumber(o.mo_horas_ajudantes)}${unidadeMo})`}
                 valor={formatCurrency(
                   o.mo_qtd_ajudantes * o.mo_horas_ajudantes * o.mo_valor_hora_ajudante,
                 )}
@@ -206,11 +220,33 @@ export default function OrcamentoDetailPage() {
             )}
           </>
         ) : (
-          <Linha rotulo="Mão de obra" valor={formatCurrency(o.valor_mao_de_obra)} />
+          <Linha
+            rotulo={`Mão de obra${forma === 'fechado' ? ' (valor fechado)' : ''}`}
+            valor={formatCurrency(o.valor_mao_de_obra)}
+          />
         )}
         <Linha rotulo="Deslocamento" valor={formatCurrency(o.valor_deslocamento)} />
         <Linha rotulo="Outros custos" valor={formatCurrency(o.outros_custos)} />
         <Linha rotulo="VALOR TOTAL" valor={formatCurrency(o.valor_total)} forte />
+      </Card>
+
+      <Card className="space-y-1 bg-emerald-50 text-sm text-emerald-900">
+        <h2 className="mb-1 text-sm font-semibold text-emerald-800">Lucro e margem</h2>
+        <div className="flex justify-between">
+          <span>Receita</span>
+          <span className="font-medium">{formatCurrency(lucro.receita)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Custo dos materiais</span>
+          <span className="font-medium">− {formatCurrency(lucro.custo)}</span>
+        </div>
+        <div className="mt-1 flex justify-between border-t border-emerald-200 pt-2 text-base font-bold">
+          <span>Lucro ({formatNumber(lucro.margemPct, 1)}%)</span>
+          <span>{formatCurrency(lucro.lucro)}</span>
+        </div>
+        <p className="text-xs text-emerald-700">
+          Forma de cobrança da mão de obra: {FORMA_COBRANCA_META[forma].label}.
+        </p>
       </Card>
 
       <Card>

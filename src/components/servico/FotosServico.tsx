@@ -4,6 +4,7 @@ import { Alert } from '@/components/ui/Alert'
 import { Loading } from '@/components/ui/Loading'
 import { useAsync } from '@/hooks/useAsync'
 import {
+  atualizarFotoServico,
   CATEGORIAS_FOTO,
   CATEGORIA_LABEL,
   enviarFotoServico,
@@ -70,6 +71,16 @@ export function FotosServico({ servicoId }: { servicoId: string }) {
     }
   }
 
+  async function handleMover(id: string, categoria: FotoCategoria) {
+    setErro('')
+    try {
+      await atualizarFotoServico(id, { categoria })
+      reload()
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não foi possível mover a foto.')
+    }
+  }
+
   return (
     <Card className="space-y-3">
       <h2 className="text-sm font-semibold text-slate-700">Fotos do serviço ({itens.length})</h2>
@@ -119,27 +130,41 @@ export function FotosServico({ servicoId }: { servicoId: string }) {
               {fotos.length === 0 ? (
                 <p className="text-xs text-slate-400">Nenhuma foto.</p>
               ) : (
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {fotos.map(({ foto, url }) => (
-                    <div key={foto.id} className="group relative overflow-hidden rounded-lg bg-slate-100">
-                      {url ? (
-                        <a href={url} target="_blank" rel="noreferrer">
-                          <img
-                            src={url}
-                            alt={foto.nome_arquivo}
-                            className="aspect-square w-full object-cover"
-                          />
-                        </a>
-                      ) : (
-                        <div className="aspect-square w-full" />
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleExcluir(foto.id)}
-                        className="absolute right-1 top-1 rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-red-600"
+                    <div key={foto.id} className="space-y-1">
+                      <div className="relative overflow-hidden rounded-lg bg-slate-100">
+                        {url ? (
+                          <a href={url} target="_blank" rel="noreferrer">
+                            <img
+                              src={url}
+                              alt={foto.nome_arquivo}
+                              className="aspect-square w-full object-cover"
+                            />
+                          </a>
+                        ) : (
+                          <div className="aspect-square w-full" />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleExcluir(foto.id)}
+                          className="absolute right-1 top-1 rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-red-600"
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                      <select
+                        value={foto.categoria}
+                        onChange={(e) => handleMover(foto.id, e.target.value as FotoCategoria)}
+                        className="w-full rounded-md border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-600"
+                        aria-label="Mover foto de categoria"
                       >
-                        Excluir
-                      </button>
+                        {CATEGORIAS_FOTO.map((c) => (
+                          <option key={c} value={c}>
+                            {CATEGORIA_LABEL[c]}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   ))}
                 </div>

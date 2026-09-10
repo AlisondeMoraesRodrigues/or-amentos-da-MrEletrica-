@@ -3,6 +3,7 @@ import { asRow, asRowOrNull, asRows, currentUserId, supabase, toDbError, usingDa
 import { demoMateriais } from './demoSeed'
 import { demoDelete, demoFind, demoInsert, demoList, demoPatch } from './demoCrud'
 import { demoId, nowIso } from './demoStore'
+import { removerFotoMaterial } from './materialFotoService'
 
 const KEY = 'materiais'
 
@@ -60,6 +61,9 @@ export async function createMaterial(input: NovoMaterial): Promise<MaterialRow> 
       valor_custo: input.valor_custo ?? 0,
       margem_percentual: input.margem_percentual ?? 20,
       valor_cobrado: input.valor_cobrado ?? 0,
+      foto_path: input.foto_path ?? null,
+      foto_nome: input.foto_nome ?? null,
+      foto_tipo: input.foto_tipo ?? null,
       created_at: ts,
       updated_at: ts,
     }
@@ -98,12 +102,20 @@ export async function updateMaterial(id: string, patch: MaterialUpdate): Promise
 
 export async function deleteMaterial(id: string): Promise<void> {
   if (!usingDatabase) {
+    const m = demoFind(KEY, demoMateriais, id)
+    await removerFotoMaterial(m?.foto_path)
     demoDelete(KEY, demoMateriais, id)
     return
   }
   try {
+    const { data } = await supabase
+      .from('materiais')
+      .select('foto_path')
+      .eq('id', id)
+      .maybeSingle()
     const { error } = await supabase.from('materiais').delete().eq('id', id)
     if (error) throw error
+    await removerFotoMaterial((data as { foto_path?: string | null } | null)?.foto_path)
   } catch (err) {
     throw toDbError(err, 'Não foi possível excluir o material.')
   }

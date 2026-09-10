@@ -16,16 +16,19 @@ import { baixarBlob, compartilharArquivo } from '@/utils/download'
 import { AIService } from '@/services/aiService'
 import { getCliente } from '@/services/clientesService'
 import { deleteMaterial, listMateriais, updateMaterial } from '@/services/materiaisService'
-import { SERVICO_STATUS_META, TIPO_HORA_META } from '@/config/servico'
+import { getUrlFotoMaterial } from '@/services/materialFotoService'
+import { FORMA_COBRANCA_META, SERVICO_STATUS_META, TIPO_HORA_META } from '@/config/servico'
 import { MARGENS_PRESET } from '@/config/material'
 import { aplicarMargem } from '@/utils/margem'
-import { formatCurrency, formatDate } from '@/utils/format'
+import { calcularLucro } from '@/utils/lucro'
+import { formatCurrency, formatDate, formatNumber } from '@/utils/format'
 import type { ClienteRow, MaterialRow, ServicoRow } from '@/types/database'
 
 interface Detalhe {
   servico: ServicoRow | null
   cliente: ClienteRow | null
   materiais: MaterialRow[]
+  fotosMateriais: Record<string, string | null>
 }
 
 function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
@@ -50,12 +53,22 @@ export default function ServicoDetailPage() {
 
   const { data, loading, error, reload } = useAsync<Detalhe>(async () => {
     const servico = await getServico(id)
-    if (!servico) return { servico: null, cliente: null, materiais: [] }
+    if (!servico) {
+      return { servico: null, cliente: null, materiais: [], fotosMateriais: {} }
+    }
     const [cliente, materiais] = await Promise.all([
       servico.cliente_id ? getCliente(servico.cliente_id) : Promise.resolve(null),
       listMateriais({ servicoId: id }),
     ])
-    return { servico, cliente, materiais }
+    const fotosMateriais: Record<string, string | null> = {}
+    await Promise.all(
+      materiais
+        .filter((m) => m.foto_path)
+        .map(async (m) => {
+          fotosMateriais[m.id] = await getUrlFotoMaterial(m.foto_path as string).catch(() => null)
+        }),
+    )
+    return { servico, cliente, materiais, fotosMateriais }
   }, [id])
 
   async function handleExcluirMaterial(materialId: string) {
@@ -201,11 +214,22 @@ export default function ServicoDetailPage() {
     )
   }
 
-  const { servico, cliente, materiais } = data
+  const { servico, cliente, materiais, fotosMateriais } = data
   const meta = SERVICO_STATUS_META[servico.status]
   const totalMateriais = materiais.reduce((s, m) => s + m.valor_cobrado * m.quantidade, 0)
+  const totalMateriaisCusto = materiais.reduce((s, m) => s + m.valor_custo * m.quantidade, 0)
   const total =
     servico.valor_mao_de_obra + servico.taxa_deslocamento + servico.outros_custos + totalMateriais
+  const forma = servico.forma_cobranca ?? 'hora'
+  const formaMeta = FORMA_COBRANCA_META[forma]
+  const lucro = calcularLucro({
+    maoDeObraCobrada: servico.valor_mao_de_obra,
+    materiaisCobrado: totalMateriais,
+    materiaisCusto: totalMateriaisCusto,
+    deslocamento: servico.taxa_deslocamento,
+    outrosCustos: servico.outros_custos,
+    custoMaoDeObra: servico.custo_mao_de_obra ?? 0,
+  })
 
   return (
     <div className="space-y-4">
@@ -266,37 +290,48 @@ export default function ServicoDetailPage() {
       </Card>
 
       <Card>
-        <h2 className="mb-1 text-sm font-semibold text-slate-700">Mão de obra</h2>
-        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Técnicos</p>
-        <Linha rotulo="Quantidade" valor={String(servico.quantidade_tecnicos)} />
-        <Linha rotulo="Horas" valor={`${servico.horas_trabalhadas} h`} />
-        <Linha rotulo="Tipo de hora" valor={TIPO_HORA_META[servico.tipo_hora].label} />
-        <Linha rotulo="Valor da hora" valor={formatCurrency(servico.valor_hora_aplicado)} />
-        {servico.quantidade_ajudantes > 0 && (
+        <div className="mb-1 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-700">Mão de obra</h2>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">
+            {formaMeta.label}
+          </span>
+        </div>
+        {forma === 'fechado' ? (
+          <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-bold text-ink-900">
+            <span>Total mão de obra (valor fechado)</span>
+            <span>{formatCurrency(servico.valor_mao_de_obra)}</span>
+          </div>
+        ) : (
           <>
-            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Ajudantes
+            <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Técnicos
             </p>
-            <Linha rotulo="Quantidade" valor={String(servico.quantidade_ajudantes)} />
-            <Linha rotulo="Horas" valor={`${servico.horas_ajudantes} h`} />
-            <Linha rotulo="Valor da hora" valor={formatCurrency(servico.valor_hora_ajudante)} />
+            <Linha rotulo="Quantidade" valor={String(servico.quantidade_tecnicos)} />
+            <Linha rotulo={formaMeta.unidade} valor={formatNumber(servico.horas_trabalhadas)} />
+            <Linha rotulo="Tipo de hora" valor={TIPO_HORA_META[servico.tipo_hora].label} />
+            <Linha
+              rotulo={forma === 'diaria' ? 'Valor da diária' : 'Valor da hora'}
+              valor={formatCurrency(servico.valor_hora_aplicado)}
+            />
+            {servico.quantidade_ajudantes > 0 && (
+              <>
+                <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Ajudantes
+                </p>
+                <Linha rotulo="Quantidade" valor={String(servico.quantidade_ajudantes)} />
+                <Linha rotulo={formaMeta.unidade} valor={formatNumber(servico.horas_ajudantes)} />
+                <Linha
+                  rotulo={forma === 'diaria' ? 'Valor da diária' : 'Valor da hora'}
+                  valor={formatCurrency(servico.valor_hora_ajudante)}
+                />
+              </>
+            )}
+            <div className="mt-1 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold text-ink-900">
+              <span>Total mão de obra</span>
+              <span>{formatCurrency(servico.valor_mao_de_obra)}</span>
+            </div>
           </>
         )}
-        <div className="mt-1 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold text-ink-900">
-          <span>Total mão de obra</span>
-          <span>{formatCurrency(servico.valor_mao_de_obra)}</span>
-        </div>
-        <p className="mt-1 text-xs text-slate-400">
-          Técnicos: {servico.quantidade_tecnicos} × {servico.horas_trabalhadas}h ×{' '}
-          {formatCurrency(servico.valor_hora_aplicado)}
-          {servico.quantidade_ajudantes > 0 && (
-            <>
-              {' '}
-              · Ajudantes: {servico.quantidade_ajudantes} × {servico.horas_ajudantes}h ×{' '}
-              {formatCurrency(servico.valor_hora_ajudante)}
-            </>
-          )}
-        </p>
       </Card>
 
       <Card>
@@ -317,12 +352,26 @@ export default function ServicoDetailPage() {
           <ul className="divide-y divide-slate-100">
             {materiais.map((m) => (
               <li key={m.id} className="flex items-center justify-between gap-3 py-2 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate text-ink-900">{m.nome}</p>
-                  <p className="text-xs text-slate-400">
-                    {m.quantidade} {m.unidade} × {formatCurrency(m.valor_cobrado)} · margem{' '}
-                    {m.margem_percentual}%
-                  </p>
+                <div className="flex min-w-0 items-center gap-2">
+                  {m.foto_path &&
+                    (fotosMateriais[m.id] ? (
+                      <a href={fotosMateriais[m.id] as string} target="_blank" rel="noreferrer">
+                        <img
+                          src={fotosMateriais[m.id] as string}
+                          alt={m.nome}
+                          className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                        />
+                      </a>
+                    ) : (
+                      <span className="h-10 w-10 shrink-0 rounded-lg bg-slate-100" />
+                    ))}
+                  <div className="min-w-0">
+                    <p className="truncate text-ink-900">{m.nome}</p>
+                    <p className="text-xs text-slate-400">
+                      {m.quantidade} {m.unidade} × {formatCurrency(m.valor_cobrado)} · margem{' '}
+                      {m.margem_percentual}%
+                    </p>
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <span className="font-medium">
@@ -379,6 +428,7 @@ export default function ServicoDetailPage() {
       <FotosServico servicoId={servico.id} />
 
       <Card>
+        <h2 className="mb-1 text-sm font-semibold text-slate-700">Total cobrado do cliente</h2>
         <Linha rotulo="Mão de obra" valor={formatCurrency(servico.valor_mao_de_obra)} />
         {servico.taxa_deslocamento > 0 && (
           <Linha rotulo="Deslocamento" valor={formatCurrency(servico.taxa_deslocamento)} />
@@ -393,6 +443,31 @@ export default function ServicoDetailPage() {
           <span>Total</span>
           <span>{formatCurrency(total)}</span>
         </div>
+      </Card>
+
+      <Card className="space-y-1 bg-emerald-50 text-sm text-emerald-900">
+        <h2 className="mb-1 text-sm font-semibold text-emerald-800">Lucro e margem</h2>
+        <div className="flex justify-between">
+          <span>Recebido (receita)</span>
+          <span className="font-medium">{formatCurrency(lucro.receita)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Custo dos materiais</span>
+          <span className="font-medium">− {formatCurrency(totalMateriaisCusto)}</span>
+        </div>
+        {servico.custo_mao_de_obra > 0 && (
+          <div className="flex justify-between">
+            <span>Custo da equipe / despesas</span>
+            <span className="font-medium">− {formatCurrency(servico.custo_mao_de_obra)}</span>
+          </div>
+        )}
+        <div className="mt-1 flex justify-between border-t border-emerald-200 pt-2 text-base font-bold">
+          <span>Lucro ({formatNumber(lucro.margemPct, 1)}%)</span>
+          <span>{formatCurrency(lucro.lucro)}</span>
+        </div>
+        <p className="text-xs text-emerald-700">
+          Margem sobre materiais: {formatCurrency(totalMateriais - totalMateriaisCusto)}.
+        </p>
       </Card>
 
       <Button variant="energy" fullWidth onClick={gerarOrcamento} disabled={gerandoOrcamento}>

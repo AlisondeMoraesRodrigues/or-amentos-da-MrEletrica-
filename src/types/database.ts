@@ -20,6 +20,8 @@ export type DocumentoTipo =
   | 'recibo'
 export type MaterialUnidade = 'un' | 'm' | 'm2' | 'kg' | 'cx' | 'rl' | 'pc' | 'l' | 'h'
 export type TipoHora = 'tecnica' | 'auxiliar' | 'emergencia' | 'noturna'
+/** Forma de cobrança da mão de obra (CP25). */
+export type FormaCobranca = 'hora' | 'diaria' | 'fechado'
 
 type Timestamps = {
   created_at: string
@@ -96,6 +98,10 @@ export interface ServicoRow extends Timestamps {
   quantidade_ajudantes: number
   horas_ajudantes: number
   valor_hora_ajudante: number
+  /** CP25: 'hora' | 'diaria' | 'fechado'. Em hora/diaria as colunas horas_* guardam a quantidade. */
+  forma_cobranca: FormaCobranca
+  /** CP25: quanto você paga à equipe (não é cobrado do cliente). Entra no lucro. */
+  custo_mao_de_obra: number
   valor_mao_de_obra: number
   taxa_deslocamento: number
   outros_custos: number
@@ -125,6 +131,8 @@ export interface OrcamentoRow extends Timestamps {
   mo_qtd_ajudantes: number
   mo_horas_ajudantes: number
   mo_valor_hora_ajudante: number
+  /** CP25: 'hora' | 'diaria' | 'fechado'. */
+  mo_forma_cobranca: FormaCobranca
   valor_deslocamento: number
   outros_custos: number
   valor_total: number
@@ -151,6 +159,10 @@ export interface MaterialRow extends Timestamps {
   valor_custo: number
   margem_percentual: number
   valor_cobrado: number
+  /** CP25: foto do material (nota, etiqueta, produto). NULL = sem foto. */
+  foto_path: string | null
+  foto_nome: string | null
+  foto_tipo: string | null
 }
 export type MaterialInsert = {
   user_id: string

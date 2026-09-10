@@ -20,9 +20,11 @@ import {
   type NovoOrcamento,
 } from '@/services/orcamentosService'
 import { ORCAMENTO_STATUS_META, ORCAMENTO_STATUS_ORDEM } from '@/config/orcamento'
+import { FORMA_COBRANCA_META, FORMA_COBRANCA_ORDEM } from '@/config/servico'
 import { calcularTotalOrcamento } from '@/utils/orcamento'
-import { formatCurrency } from '@/utils/format'
-import type { OrcamentoStatus } from '@/types/database'
+import { calcularLucro } from '@/utils/lucro'
+import { formatCurrency, formatNumber } from '@/utils/format'
+import type { FormaCobranca, OrcamentoStatus } from '@/types/database'
 
 type Campos = {
   cliente_id: string
@@ -35,6 +37,7 @@ type Campos = {
   observacoes: string
   valor_materiais: string
   valor_margem_materiais: string
+  mo_forma_cobranca: FormaCobranca
   valor_mao_de_obra: string
   mo_qtd_tecnicos: string
   mo_horas_tecnicos: string
@@ -57,6 +60,7 @@ const VAZIO: Campos = {
   observacoes: '',
   valor_materiais: '',
   valor_margem_materiais: '',
+  mo_forma_cobranca: 'hora',
   valor_mao_de_obra: '',
   mo_qtd_tecnicos: '',
   mo_horas_tecnicos: '',
@@ -131,6 +135,7 @@ export default function OrcamentoFormPage() {
           observacoes: o.observacoes ?? '',
           valor_materiais: String(o.valor_materiais ?? ''),
           valor_margem_materiais: String(o.valor_margem_materiais ?? ''),
+          mo_forma_cobranca: o.mo_forma_cobranca ?? 'hora',
           valor_mao_de_obra: String(o.valor_mao_de_obra ?? ''),
           mo_qtd_tecnicos: o.mo_qtd_tecnicos ? String(o.mo_qtd_tecnicos) : '',
           mo_horas_tecnicos: o.mo_horas_tecnicos ? String(o.mo_horas_tecnicos) : '',
@@ -174,6 +179,7 @@ export default function OrcamentoFormPage() {
         cliente_id: c.cliente_id || servico.cliente_id || '',
         valor_materiais: String(custo),
         valor_margem_materiais: String(r2(cobrado - custo)),
+        mo_forma_cobranca: servico.forma_cobranca ?? 'hora',
         valor_mao_de_obra: String(servico.valor_mao_de_obra),
         mo_qtd_tecnicos: servico.quantidade_tecnicos ? String(servico.quantidade_tecnicos) : '',
         mo_horas_tecnicos: servico.horas_trabalhadas ? String(servico.horas_trabalhadas) : '',
@@ -191,13 +197,16 @@ export default function OrcamentoFormPage() {
     }
   }
 
+  const formaMeta = FORMA_COBRANCA_META[campos.mo_forma_cobranca]
+  const fechado = campos.mo_forma_cobranca === 'fechado'
+
   const moTecnicos = r2(
     num(campos.mo_qtd_tecnicos) * num(campos.mo_horas_tecnicos) * num(campos.mo_valor_hora_tecnico),
   )
   const moAjudantes = r2(
     num(campos.mo_qtd_ajudantes) * num(campos.mo_horas_ajudantes) * num(campos.mo_valor_hora_ajudante),
   )
-  const temDetalheMaoDeObra = moTecnicos > 0 || moAjudantes > 0
+  const temDetalheMaoDeObra = !fechado && (moTecnicos > 0 || moAjudantes > 0)
   const valorMaoDeObra = temDetalheMaoDeObra
     ? r2(moTecnicos + moAjudantes)
     : num(campos.valor_mao_de_obra)
@@ -210,6 +219,15 @@ export default function OrcamentoFormPage() {
     outrosCustos: num(campos.outros_custos),
   }
   const total = calcularTotalOrcamento(componentes)
+
+  // Lucro do orçamento: tudo menos o preço de custo dos materiais.
+  const lucro = calcularLucro({
+    maoDeObraCobrada: valorMaoDeObra,
+    materiaisCobrado: r2(num(campos.valor_materiais) + num(campos.valor_margem_materiais)),
+    materiaisCusto: num(campos.valor_materiais),
+    deslocamento: num(campos.valor_deslocamento),
+    outrosCustos: num(campos.outros_custos),
+  })
 
   function validar(): boolean {
     const next: Partial<Record<keyof Campos, string>> = {}
@@ -230,6 +248,7 @@ export default function OrcamentoFormPage() {
       status: campos.status,
       valor_materiais: num(campos.valor_materiais),
       valor_margem_materiais: num(campos.valor_margem_materiais),
+      mo_forma_cobranca: campos.mo_forma_cobranca,
       valor_mao_de_obra: valorMaoDeObra,
       mo_qtd_tecnicos: temDetalheMaoDeObra ? num(campos.mo_qtd_tecnicos) : 0,
       mo_horas_tecnicos: temDetalheMaoDeObra ? num(campos.mo_horas_tecnicos) : 0,
@@ -369,25 +388,24 @@ export default function OrcamentoFormPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Mão de obra
             </p>
-            <p className="text-xs text-slate-400">
-              Preencha o detalhe por equipe <span className="font-medium">ou</span> só o valor
-              total abaixo. Use “Puxar valores do serviço” para trazer tudo pronto.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-3">
-              {valorField('Técnicos (qtd)', 'mo_qtd_tecnicos')}
-              {valorField('Horas técnicos', 'mo_horas_tecnicos')}
-              {valorField('R$/h técnico', 'mo_valor_hora_tecnico')}
-              {valorField('Ajudantes (qtd)', 'mo_qtd_ajudantes')}
-              {valorField('Horas ajudantes', 'mo_horas_ajudantes')}
-              {valorField('R$/h ajudante', 'mo_valor_hora_ajudante')}
+            <div className="grid grid-cols-3 gap-2">
+              {FORMA_COBRANCA_ORDEM.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => set('mo_forma_cobranca', f)}
+                  className={`rounded-lg px-2 py-2 text-sm font-semibold ${
+                    campos.mo_forma_cobranca === f
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-white text-slate-600 ring-1 ring-slate-200'
+                  }`}
+                >
+                  {FORMA_COBRANCA_META[f].label}
+                </button>
+              ))}
             </div>
-            {temDetalheMaoDeObra ? (
-              <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-800">
-                Técnicos {formatCurrency(moTecnicos)}
-                {moAjudantes > 0 && <> + Ajudantes {formatCurrency(moAjudantes)}</>} ={' '}
-                <span className="font-bold">Mão de obra {formatCurrency(valorMaoDeObra)}</span>
-              </p>
-            ) : (
+
+            {fechado ? (
               <TextField
                 label="Mão de obra — valor total R$"
                 name="valor_mao_de_obra"
@@ -398,6 +416,45 @@ export default function OrcamentoFormPage() {
                 value={campos.valor_mao_de_obra}
                 onChange={(e) => set('valor_mao_de_obra', e.target.value)}
               />
+            ) : (
+              <>
+                <p className="text-xs text-slate-400">
+                  Preencha o detalhe por equipe <span className="font-medium">ou</span> só o
+                  valor total. Use “Puxar valores do serviço” para trazer tudo pronto.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {valorField('Técnicos (qtd)', 'mo_qtd_tecnicos')}
+                  {valorField(`${formaMeta.unidade} técnicos`, 'mo_horas_tecnicos')}
+                  {valorField(
+                    campos.mo_forma_cobranca === 'diaria' ? 'R$/diária técnico' : 'R$/h técnico',
+                    'mo_valor_hora_tecnico',
+                  )}
+                  {valorField('Ajudantes (qtd)', 'mo_qtd_ajudantes')}
+                  {valorField(`${formaMeta.unidade} ajudantes`, 'mo_horas_ajudantes')}
+                  {valorField(
+                    campos.mo_forma_cobranca === 'diaria' ? 'R$/diária ajudante' : 'R$/h ajudante',
+                    'mo_valor_hora_ajudante',
+                  )}
+                </div>
+                {temDetalheMaoDeObra ? (
+                  <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-800">
+                    Técnicos {formatCurrency(moTecnicos)}
+                    {moAjudantes > 0 && <> + Ajudantes {formatCurrency(moAjudantes)}</>} ={' '}
+                    <span className="font-bold">Mão de obra {formatCurrency(valorMaoDeObra)}</span>
+                  </p>
+                ) : (
+                  <TextField
+                    label="Mão de obra — valor total R$"
+                    name="valor_mao_de_obra"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={campos.valor_mao_de_obra}
+                    onChange={(e) => set('valor_mao_de_obra', e.target.value)}
+                  />
+                )}
+              </>
             )}
           </div>
 
@@ -408,6 +465,21 @@ export default function OrcamentoFormPage() {
             {formatCurrency(componentes.valorDeslocamento)} + Outros{' '}
             {formatCurrency(componentes.outrosCustos)} ={' '}
             <span className="font-bold">{formatCurrency(total)}</span>
+          </div>
+
+          <div className="space-y-1 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+            <div className="flex justify-between">
+              <span>Receita (total do orçamento)</span>
+              <span className="font-medium">{formatCurrency(lucro.receita)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Custo dos materiais</span>
+              <span className="font-medium">− {formatCurrency(lucro.custo)}</span>
+            </div>
+            <div className="flex justify-between border-t border-emerald-200 pt-1 font-bold">
+              <span>Lucro ({formatNumber(lucro.margemPct, 1)}%)</span>
+              <span>{formatCurrency(lucro.lucro)}</span>
+            </div>
           </div>
         </Card>
 

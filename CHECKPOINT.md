@@ -1698,3 +1698,88 @@ valor_mao_de_obra =
    `GEMINI_API_KEY` — ver `supabase/functions/gerar-descricao/README.md`.
 
 🟢 **CHECKPOINT 24 CONCLUÍDO**.
+
+---
+
+# CHECKPOINT 25 — FOTO NO MATERIAL · FORMA DE COBRANÇA · LUCRO E MARGEM
+
+> Pedido pós go-live: integrar foto no cadastro de materiais, poder editar
+> tudo, escolher a forma de cobrança da mão de obra e ver lucro/margem na
+> hora — tudo otimizado para celular. Nada recriado; nenhum dado apagado.
+
+## 1. Foto no cadastro de material
+
+- Colunas novas em `materiais`: `foto_path`, `foto_nome`, `foto_tipo` (NULL = sem foto).
+- `src/services/materialFotoService.ts` — upload/URL/remoção no bucket privado
+  `fotos-servicos` (pasta `materiais`); no modo demonstração vira data URL.
+- `MaterialFormPage` — bloco "Foto do material (opcional)": botão "📷 Tirar foto /
+  escolher imagem" (`capture="environment"`), pré-visualização, **Trocar** e
+  **Remover**. Ao salvar: sobe a nova foto, apaga a antiga só depois do sucesso.
+- `materiaisService.deleteMaterial` remove o arquivo junto.
+- `ServicoDetailPage` — miniatura ao lado de cada material (abre a foto).
+- `MateriaisPage` — link **Editar** por material (além de "Ver serviço").
+
+## 2. Forma de cobrança da mão de obra
+
+`servicos.forma_cobranca` e `orcamentos.mo_forma_cobranca` (`text` + `check`):
+
+| Forma | Cálculo |
+| ----- | ------- |
+| `hora` (padrão) | qtd × horas × R$/h — igual ao anterior |
+| `diaria` | qtd × diárias × R$/diária (mesmas colunas, rótulos mudam) |
+| `fechado` | um valor único de mão de obra, digitado direto |
+
+- `src/utils/maoDeObra.ts` — `calcularMaoDeObra` aceita `forma` + `valorFechado`;
+  `'fechado'` devolve o valor único, `'hora'`/`'diaria'` usam a mesma fórmula.
+- Seletor "Como cobrar?" (3 botões) no serviço e no orçamento; rótulos de campo
+  e do resumo se adaptam (Horas ↔ Diárias, Valor da hora ↔ Valor da diária).
+- PDFs (orçamento e ordem de serviço) mostram a forma e usam `h`/`d`.
+
+## 3. Lucro e margem imediatos
+
+- `src/utils/lucro.ts` — `calcularLucro({ receita, custo }) → { receita, custo,
+  lucro, margemPct }`.
+  - Receita = mão de obra + materiais cobrados + deslocamento + outros.
+  - Custo = materiais a preço de custo + `custo_mao_de_obra` (o que você paga à
+    equipe; **não** é cobrado do cliente) — coluna nova em `servicos`.
+- `ServicoFormPage` — card "Custos e lucro" com lucro da mão de obra ao vivo.
+- `ServicoDetailPage` — card "Lucro e margem" (com materiais): receita, custo,
+  lucro e **margem %**.
+- `OrcamentoFormPage` / `OrcamentoDetailPage` — bloco de lucro/margem ao vivo
+  (Lucro = total − custo dos materiais).
+
+## 4. "Editar tudo"
+
+- Material: agora inclui a foto; editável em `MateriaisPage` e no serviço.
+- `FotosServico` — cada foto tem um seletor para **mover** entre
+  Antes / Durante / Depois (usa `atualizarFotoServico`, que já existia).
+- Cliente, serviço, orçamento, configurações, materiais, notas: edição completa
+  já existente, agora cobrindo os campos novos.
+
+## Banco — `supabase/migrations/20260910130000_material_foto_cobranca_lucro.sql`
+
+Só `alter table ... add column if not exists` (+ `check` idempotente). Seguro
+rodar no banco em uso; linhas antigas ficam com `forma_cobranca = 'hora'` e
+custos/foto em 0/NULL. Incluído em `supabase/setup-completo.sql`.
+
+## Verificação
+
+- `npm run build` — **0 erros / 0 warnings**.
+- `npm run lint` — **0 erros / 0 warnings**.
+- Testado no navegador (Supabase real, modo dev):
+  - Serviço: "Por hora / Por diária / Valor fechado" alternam campos e rótulos;
+    diária 2×3×R$250 + ajudante 1×3×R$120 = **R$ 1.860** ✔; fechado R$ 2.000 ✔;
+    card de lucro atualiza ao digitar ✔.
+  - Serviço (detalhe): cards "Total cobrado" e "Lucro e margem" (margem %) ✔.
+  - Material: bloco de foto (tirar/trocar/remover) ✔.
+  - Orçamento: seletor de forma + bloco de lucro (R$ 530 / 84,1%) ✔.
+  - Console sem erros.
+  - Telas em largura de celular ✔ (grades `sm:` colapsam para 1 coluna).
+
+## Pendências para o usuário (Supabase)
+
+Rodar `supabase/migrations/20260910130000_material_foto_cobranca_lucro.sql` no
+SQL Editor (ou `setup-completo.sql` de novo). Sem isso, **abrir** as telas
+funciona, mas **salvar** serviço/material/orçamento dá erro de coluna inexistente.
+
+🟢 **CHECKPOINT 25 CONCLUÍDO**.

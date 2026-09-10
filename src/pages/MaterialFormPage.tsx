@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card } from '@/components/ui/Card'
@@ -15,6 +15,11 @@ import {
   type NovoMaterial,
 } from '@/services/materiaisService'
 import { getConfiguracao } from '@/services/configuracoesService'
+import {
+  enviarFotoMaterial,
+  getUrlFotoMaterial,
+  removerFotoMaterial,
+} from '@/services/materialFotoService'
 import { MARGEM_PADRAO, MARGENS_PRESET, UNIDADE_LABEL, UNIDADE_ORDEM } from '@/config/material'
 import { aplicarMargem, margemImplicita, valorDaMargem } from '@/utils/margem'
 import { formatCurrency, formatNumber } from '@/utils/format'
@@ -55,6 +60,13 @@ export default function MaterialFormPage() {
   }))
   const [cobradoManual, setCobradoManual] = useState(false)
   const [margemOutra, setMargemOutra] = useState(false)
+
+  const fotoInputRef = useRef<HTMLInputElement>(null)
+  const [fotoFile, setFotoFile] = useState<File | null>(null)
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
+  const [fotoPathAtual, setFotoPathAtual] = useState<string | null>(null)
+  const [removerFotoFlag, setRemoverFotoFlag] = useState(false)
+
   const [carregando, setCarregando] = useState(editando)
   const [inicializado, setInicializado] = useState(editando)
   const [erroCarga, setErroCarga] = useState('')
@@ -94,6 +106,14 @@ export default function MaterialFormPage() {
         })
         setCobradoManual(manual)
         setMargemOutra(!PRESETS.includes(m.margem_percentual))
+        setFotoPathAtual(m.foto_path)
+        if (m.foto_path) {
+          getUrlFotoMaterial(m.foto_path)
+            .then((url) => {
+              if (ativo) setFotoPreview(url)
+            })
+            .catch(() => undefined)
+        }
       })
       .catch((e: unknown) =>
         setErroCarga(e instanceof Error ? e.message : 'Não foi possível carregar o material.'),
@@ -108,6 +128,35 @@ export default function MaterialFormPage() {
 
   function set<K extends keyof Campos>(chave: K, valor: Campos[K]) {
     setCampos((c) => ({ ...c, [chave]: valor }))
+  }
+
+  // Limpa o object URL da pré-visualização ao trocar/desmontar.
+  useEffect(() => {
+    return () => {
+      if (fotoPreview?.startsWith('blob:')) URL.revokeObjectURL(fotoPreview)
+    }
+  }, [fotoPreview])
+
+  function handleFoto(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setErroGeral('Envie uma imagem (foto) do material.')
+      return
+    }
+    setErroGeral('')
+    if (fotoPreview?.startsWith('blob:')) URL.revokeObjectURL(fotoPreview)
+    setFotoFile(file)
+    setFotoPreview(URL.createObjectURL(file))
+    setRemoverFotoFlag(false)
+  }
+
+  function removerFotoLocal() {
+    if (fotoPreview?.startsWith('blob:')) URL.revokeObjectURL(fotoPreview)
+    setFotoFile(null)
+    setFotoPreview(null)
+    setRemoverFotoFlag(Boolean(fotoPathAtual))
   }
 
   const custoUnit = num(campos.valor_custo)
@@ -167,8 +216,25 @@ export default function MaterialFormPage() {
 
     setSalvando(true)
     try {
+      if (fotoFile) {
+        const enviada = await enviarFotoMaterial(fotoFile)
+        payload.foto_path = enviada.foto_path
+        payload.foto_nome = enviada.foto_nome
+        payload.foto_tipo = enviada.foto_tipo
+      } else if (removerFotoFlag) {
+        payload.foto_path = null
+        payload.foto_nome = null
+        payload.foto_tipo = null
+      }
+
       if (materialId) await updateMaterial(materialId, payload)
       else await createMaterial(payload)
+
+      // remove o arquivo antigo depois de gravar a troca/remoção com sucesso
+      if ((fotoFile || removerFotoFlag) && fotoPathAtual && fotoPathAtual !== payload.foto_path) {
+        await removerFotoMaterial(fotoPathAtual)
+      }
+
       navigate(voltar, { replace: true })
     } catch (err) {
       setErroGeral(err instanceof Error ? err.message : 'Não foi possível salvar o material.')
@@ -245,6 +311,53 @@ export default function MaterialFormPage() {
             value={campos.valor_custo}
             onChange={(e) => set('valor_custo', e.target.value)}
           />
+
+          <div>
+            <span className="mb-1 block text-xs font-medium text-slate-500">
+              Foto do material (opcional)
+            </span>
+            <input
+              ref={fotoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleFoto}
+            />
+            {fotoPreview ? (
+              <div className="flex items-center gap-3">
+                <img
+                  src={fotoPreview}
+                  alt="Foto do material"
+                  className="h-20 w-20 rounded-lg object-cover ring-1 ring-slate-200"
+                />
+                <div className="flex flex-col gap-1 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => fotoInputRef.current?.click()}
+                    className="font-semibold text-brand-600 underline"
+                  >
+                    Trocar foto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={removerFotoLocal}
+                    className="font-semibold text-red-600 underline"
+                  >
+                    Remover foto
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fotoInputRef.current?.click()}
+                className="flex h-20 w-full items-center justify-center rounded-lg border border-dashed border-slate-300 text-sm font-semibold text-slate-500"
+              >
+                📷 Tirar foto / escolher imagem
+              </button>
+            )}
+          </div>
         </Card>
 
         <Card className="space-y-3">

@@ -1,4 +1,4 @@
-import type { ConfiguracaoRow, ServicoRow, TipoHora } from '@/types/database'
+import type { ConfiguracaoRow, FormaCobranca, ServicoRow, TipoHora } from '@/types/database'
 import { valorHoraDaConfig } from '@/config/servico'
 
 /**
@@ -35,6 +35,13 @@ export interface EntradaMaoDeObra {
   tecnicos: EntradaGrupo & { tipoHora: TipoHora }
   /** Grupo dos ajudantes. Usa `configuracoes.valor_hora_auxiliar` por padrão. */
   ajudantes?: EntradaGrupo
+  /**
+   * CP25: 'hora' (padrão) e 'diaria' usam a mesma fórmula
+   * (quantidade × horas/diárias × valor). 'fechado' ignora os grupos e usa
+   * `valorFechado` como o total da mão de obra.
+   */
+  forma?: FormaCobranca
+  valorFechado?: number
 }
 
 export interface ResultadoGrupo {
@@ -46,6 +53,7 @@ export interface ResultadoGrupo {
 }
 
 export interface ResultadoMaoDeObra {
+  forma: FormaCobranca
   tecnicos: ResultadoGrupo
   ajudantes: ResultadoGrupo
   valorMaoDeObra: number
@@ -84,10 +92,35 @@ function calcularGrupo(
   }
 }
 
+const GRUPO_ZERO: ResultadoGrupo = {
+  quantidade: 0,
+  horas: 0,
+  valorHora: 0,
+  origemValorHora: 'informado',
+  subtotal: 0,
+}
+
 export function calcularMaoDeObra(
   entrada: EntradaMaoDeObra,
   config: ConfiguracaoRow,
 ): ResultadoMaoDeObra {
+  const forma: FormaCobranca = entrada.forma ?? 'hora'
+
+  if (forma === 'fechado') {
+    const valor = arredondar(Math.max(0, entrada.valorFechado ?? 0))
+    return {
+      forma,
+      tecnicos: { ...GRUPO_ZERO },
+      ajudantes: { ...GRUPO_ZERO },
+      valorMaoDeObra: valor,
+      quantidadeTecnicos: 0,
+      horasTrabalhadas: 0,
+      tipoHora: entrada.tecnicos.tipoHora,
+      valorHora: 0,
+      origemValorHora: 'informado',
+    }
+  }
+
   const tecnicos = calcularGrupo(
     entrada.tecnicos,
     valorHoraDaConfig(config, entrada.tecnicos.tipoHora),
@@ -100,6 +133,7 @@ export function calcularMaoDeObra(
   )
 
   return {
+    forma,
     tecnicos,
     ajudantes,
     valorMaoDeObra: arredondar(tecnicos.subtotal + ajudantes.subtotal),
@@ -123,11 +157,15 @@ export function recalcularMaoDeObraDoServico(
     | 'quantidade_ajudantes'
     | 'horas_ajudantes'
     | 'valor_hora_ajudante'
+    | 'forma_cobranca'
+    | 'valor_mao_de_obra'
   >,
   config: ConfiguracaoRow,
 ): ResultadoMaoDeObra {
   return calcularMaoDeObra(
     {
+      forma: servico.forma_cobranca ?? 'hora',
+      valorFechado: servico.valor_mao_de_obra,
       tecnicos: {
         quantidade: servico.quantidade_tecnicos,
         horas: servico.horas_trabalhadas,

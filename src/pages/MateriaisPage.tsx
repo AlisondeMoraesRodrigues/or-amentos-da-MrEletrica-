@@ -100,12 +100,20 @@ export default function MateriaisPage() {
                     <div className="flex items-start justify-between gap-3">
                       <p className="font-semibold text-ink-900">{m.nome}</p>
                       {m.servico_id && (
-                        <Link
-                          to={`/servicos/${m.servico_id}`}
-                          className="shrink-0 text-xs font-semibold text-brand-600 underline"
-                        >
-                          Ver serviço
-                        </Link>
+                        <div className="flex shrink-0 gap-3 text-xs font-semibold">
+                          <Link
+                            to={`/servicos/${m.servico_id}/materiais/${m.id}/editar`}
+                            className="text-brand-600 underline"
+                          >
+                            Editar
+                          </Link>
+                          <Link
+                            to={`/servicos/${m.servico_id}`}
+                            className="text-brand-600 underline"
+                          >
+                            Ver serviço
+                          </Link>
+                        </div>
                       )}
                     </div>
                     {ctx && (
