@@ -1,9 +1,16 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-// `|| undefined` garante fallback mesmo quando a variável existe porém vazia
-// (ex.: definida sem valor no painel da Vercel).
-const url = import.meta.env.VITE_SUPABASE_URL?.trim() || undefined
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() || undefined
+// Projeto Supabase de produção. A chave "anon" é PÚBLICA por design (fica visível
+// no bundle do site de qualquer forma; a segurança vem das políticas RLS do banco).
+// Por isso pode ficar no código. NUNCA coloque aqui a chave "service_role".
+// As variáveis de ambiente, quando definidas, têm prioridade sobre estes valores.
+const FALLBACK_SUPABASE_URL = 'https://fuwsmbzrhxyolhvznglp.supabase.co'
+const FALLBACK_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ1d3NtYnpyaHh5b2xodnpuZ2xwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NzkzNTQsImV4cCI6MjEwNDQ1NTM1NH0.DbQXcgvzCNEJwTBgvyAfAtdesozT9Fqg6j7tZTO9LDU'
+
+const url = import.meta.env.VITE_SUPABASE_URL?.trim() || FALLBACK_SUPABASE_URL
+const anonKey =
+  import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() || FALLBACK_SUPABASE_ANON_KEY
 
 /**
  * Indica se as variáveis de ambiente do Supabase estão configuradas.
