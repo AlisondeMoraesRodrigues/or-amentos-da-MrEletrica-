@@ -190,7 +190,24 @@ export default function OrcamentoDetailPage() {
             valorMargemMateriais: o.valor_margem_materiais,
           }))}
         />
-        <Linha rotulo="Mão de obra" valor={formatCurrency(o.valor_mao_de_obra)} />
+        {o.mo_qtd_tecnicos > 0 || o.mo_qtd_ajudantes > 0 ? (
+          <>
+            <Linha
+              rotulo={`Mão de obra — técnicos (${o.mo_qtd_tecnicos}×${o.mo_horas_tecnicos}h)`}
+              valor={formatCurrency(o.mo_qtd_tecnicos * o.mo_horas_tecnicos * o.mo_valor_hora_tecnico)}
+            />
+            {o.mo_qtd_ajudantes > 0 && (
+              <Linha
+                rotulo={`Mão de obra — ajudantes (${o.mo_qtd_ajudantes}×${o.mo_horas_ajudantes}h)`}
+                valor={formatCurrency(
+                  o.mo_qtd_ajudantes * o.mo_horas_ajudantes * o.mo_valor_hora_ajudante,
+                )}
+              />
+            )}
+          </>
+        ) : (
+          <Linha rotulo="Mão de obra" valor={formatCurrency(o.valor_mao_de_obra)} />
+        )}
         <Linha rotulo="Deslocamento" valor={formatCurrency(o.valor_deslocamento)} />
         <Linha rotulo="Outros custos" valor={formatCurrency(o.outros_custos)} />
         <Linha rotulo="VALOR TOTAL" valor={formatCurrency(o.valor_total)} forte />

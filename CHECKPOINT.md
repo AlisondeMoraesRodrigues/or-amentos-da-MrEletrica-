@@ -1626,3 +1626,75 @@ erros; testado no modo demonstração.
   (regra 10). Para ativar, `setOCRProvider` / `setAIProvider` + Edge Function.
 
 🟢 **CHECKPOINT 23 CONCLUÍDO — PROJETO v1.0.0**.
+
+---
+
+# CHECKPOINT 24 — EQUIPE (TÉCNICO + AJUDANTE) + IA REAL DE TEXTO
+
+> Ajuste pedido depois do go-live: "sempre se trabalha de 2" — poder lançar
+> técnico **e** ajudante juntos, cada um com sua hora e seu valor de hora.
+> Também: ligar uma IA de verdade para escrever a descrição do serviço.
+
+## Mão de obra com dois grupos
+
+Antes: `nº técnicos × horas × 1 valor/h`.
+Agora:
+
+```
+valor_mao_de_obra =
+    (nº técnicos  × horas técnicos  × R$/h técnico)
+  + (nº ajudantes × horas ajudantes × R$/h ajudante)
+```
+
+- R$/h do ajudante: valor informado no serviço **ou** `configuracoes.valor_hora_auxiliar`.
+- Horas dos técnicos e dos ajudantes são **separadas**.
+- Sem ajudante (`quantidade_ajudantes = 0`) o resultado é idêntico ao anterior
+  — registros antigos continuam válidos.
+
+### Banco (`supabase/migrations/20260910120000_equipe_tecnico_ajudante.sql`)
+
+- `servicos` +: `quantidade_ajudantes`, `horas_ajudantes`, `valor_hora_ajudante` (default 0).
+- `orcamentos` +: `mo_qtd_tecnicos`, `mo_horas_tecnicos`, `mo_valor_hora_tecnico`,
+  `mo_qtd_ajudantes`, `mo_horas_ajudantes`, `mo_valor_hora_ajudante` (default 0).
+  Se tudo 0, o orçamento usa só `valor_mao_de_obra` (valor único, comportamento antigo).
+- Só `add column if not exists` — **seguro rodar no banco já em uso**.
+- Incluído em `supabase/setup-completo.sql`.
+
+### Código
+
+- `src/utils/maoDeObra.ts` — `calcularMaoDeObra` agora recebe `{ tecnicos, ajudantes }`
+  e devolve `{ tecnicos, ajudantes, valorMaoDeObra, ... }` (campos antigos mantidos
+  por compatibilidade). `recalcularMaoDeObraDoServico` lê as colunas novas.
+- `ServicoFormPage` / `ServicoDetailPage` — seção "Técnicos" + seção "Ajudantes"
+  (rótulo deixa 0 se trabalhou sozinho); resumo mostra os dois subtotais.
+- `OrcamentoFormPage` — bloco "Mão de obra": detalhe por equipe (6 campos) **ou**
+  valor total único. "Puxar valores do serviço" traz o detalhe pronto.
+- `OrcamentoDetailPage` + PDFs (`orcamentoPdf`, `documentosPdf`) — linhas
+  separadas de técnicos / ajudantes quando há detalhe.
+- Tipos (`src/types/database.ts`), seeds de demonstração e services atualizados.
+
+## IA de texto de verdade (opcional, gratuita)
+
+- `supabase/functions/gerar-descricao/` — Edge Function que chama o **Google
+  Gemini** (modelo `gemini-1.5-flash`, faixa gratuita). A chave fica no secret
+  `GEMINI_API_KEY` — nunca no front. README com o passo a passo de publicação.
+- `src/services/aiService.ts` — novo provedor `edge` (`criarProvedorEdge`) que
+  invoca a função; **se ela não existir ou falhar, cai no gerador local** (`regras`)
+  automaticamente — a tela nunca quebra.
+- `src/services/aiSetup.ts` (importado em `main.tsx`) registra o provedor `edge`
+  quando o Supabase está configurado.
+- Contexto da IA agora inclui ajudantes.
+
+## Verificação
+
+- `npm run build` — **0 erros / 0 warnings**.
+- `npm run lint` — **0 erros / 0 warnings** (`supabase/functions` são Deno, ignorados).
+
+## Pendências para o usuário (Supabase)
+
+1. Rodar `supabase/migrations/20260910120000_equipe_tecnico_ajudante.sql` no
+   SQL Editor (ou `setup-completo.sql` de novo — é idempotente).
+2. (Opcional, para IA) publicar a função `gerar-descricao` e configurar o secret
+   `GEMINI_API_KEY` — ver `supabase/functions/gerar-descricao/README.md`.
+
+🟢 **CHECKPOINT 24 CONCLUÍDO**.

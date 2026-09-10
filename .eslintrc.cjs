@@ -6,7 +6,8 @@ module.exports = {
     'plugin:@typescript-eslint/recommended',
     'plugin:react-hooks/recommended',
   ],
-  ignorePatterns: ['dist', 'dev-dist', '.eslintrc.cjs'],
+  // supabase/functions são Deno (runtime diferente) — não fazem parte do build do app.
+  ignorePatterns: ['dist', 'dev-dist', '.eslintrc.cjs', 'supabase/functions'],
   parser: '@typescript-eslint/parser',
   plugins: ['react-refresh'],
   rules: {

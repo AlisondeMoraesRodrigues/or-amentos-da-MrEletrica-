@@ -69,9 +69,27 @@ export async function montarOrcamentoPdf(d: DadosOrcamentoPdf): Promise<PdfDoc> 
     valorMateriais: o.valor_materiais,
     valorMargemMateriais: o.valor_margem_materiais,
   })
+  const temEquipe =
+    o.mo_qtd_tecnicos > 0 || o.mo_qtd_ajudantes > 0
+  const linhasMaoDeObra: [string, string][] = temEquipe
+    ? [
+        [
+          `Mão de obra — técnicos (${o.mo_qtd_tecnicos} × ${formatNumber(o.mo_horas_tecnicos)}h × ${formatCurrency(o.mo_valor_hora_tecnico)})`,
+          formatCurrency(o.mo_qtd_tecnicos * o.mo_horas_tecnicos * o.mo_valor_hora_tecnico),
+        ],
+        ...(o.mo_qtd_ajudantes > 0
+          ? ([
+              [
+                `Mão de obra — ajudantes (${o.mo_qtd_ajudantes} × ${formatNumber(o.mo_horas_ajudantes)}h × ${formatCurrency(o.mo_valor_hora_ajudante)})`,
+                formatCurrency(o.mo_qtd_ajudantes * o.mo_horas_ajudantes * o.mo_valor_hora_ajudante),
+              ],
+            ] as [string, string][])
+          : []),
+      ]
+    : [['Mão de obra', formatCurrency(o.valor_mao_de_obra)]]
   pdf.linhas([
     ['Materiais', formatCurrency(materiaisCobrado)],
-    ['Mão de obra', formatCurrency(o.valor_mao_de_obra)],
+    ...linhasMaoDeObra,
     ...(o.valor_deslocamento > 0
       ? ([['Deslocamento', formatCurrency(o.valor_deslocamento)]] as [string, string][])
       : []),

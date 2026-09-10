@@ -33,6 +33,9 @@ type Campos = {
   horas_trabalhadas: string
   tipo_hora: TipoHora
   valor_hora_aplicado: string
+  quantidade_ajudantes: string
+  horas_ajudantes: string
+  valor_hora_ajudante: string
   taxa_deslocamento: string
   outros_custos: string
   status: ServicoStatus
@@ -49,6 +52,9 @@ const VAZIO: Campos = {
   horas_trabalhadas: '',
   tipo_hora: 'tecnica',
   valor_hora_aplicado: '',
+  quantidade_ajudantes: '0',
+  horas_ajudantes: '',
+  valor_hora_ajudante: '',
   taxa_deslocamento: '',
   outros_custos: '',
   status: 'aberto',
@@ -105,6 +111,9 @@ export default function ServicoFormPage() {
           horas_trabalhadas: String(s.horas_trabalhadas ?? ''),
           tipo_hora: s.tipo_hora,
           valor_hora_aplicado: s.valor_hora_aplicado ? String(s.valor_hora_aplicado) : '',
+          quantidade_ajudantes: String(s.quantidade_ajudantes ?? 0),
+          horas_ajudantes: s.horas_ajudantes ? String(s.horas_ajudantes) : '',
+          valor_hora_ajudante: s.valor_hora_ajudante ? String(s.valor_hora_ajudante) : '',
           taxa_deslocamento: s.taxa_deslocamento ? String(s.taxa_deslocamento) : '',
           outros_custos: s.outros_custos ? String(s.outros_custos) : '',
           status: s.status,
@@ -129,11 +138,19 @@ export default function ServicoFormPage() {
     if (!apoio) return null
     return calcularMaoDeObra(
       {
-        quantidadeTecnicos: num(campos.quantidade_tecnicos),
-        horasTrabalhadas: num(campos.horas_trabalhadas),
-        tipoHora: campos.tipo_hora,
-        valorHoraInformado:
-          campos.valor_hora_aplicado.trim() === '' ? null : num(campos.valor_hora_aplicado),
+        tecnicos: {
+          quantidade: num(campos.quantidade_tecnicos),
+          horas: num(campos.horas_trabalhadas),
+          tipoHora: campos.tipo_hora,
+          valorHoraInformado:
+            campos.valor_hora_aplicado.trim() === '' ? null : num(campos.valor_hora_aplicado),
+        },
+        ajudantes: {
+          quantidade: num(campos.quantidade_ajudantes),
+          horas: num(campos.horas_ajudantes),
+          valorHoraInformado:
+            campos.valor_hora_ajudante.trim() === '' ? null : num(campos.valor_hora_ajudante),
+        },
       },
       apoio.config,
     )
@@ -143,9 +160,16 @@ export default function ServicoFormPage() {
     campos.horas_trabalhadas,
     campos.tipo_hora,
     campos.valor_hora_aplicado,
+    campos.quantidade_ajudantes,
+    campos.horas_ajudantes,
+    campos.valor_hora_ajudante,
   ])
 
   const valorHoraConfig = apoio ? valorHoraDaConfig(apoio.config, campos.tipo_hora) : 0
+  const valorHoraAjudanteConfig =
+    apoio && typeof apoio.config.valor_hora_auxiliar === 'number'
+      ? apoio.config.valor_hora_auxiliar
+      : 0
 
   async function gerarDescricao() {
     if (!campos.descricao_livre.trim()) return
@@ -156,6 +180,8 @@ export default function ServicoFormPage() {
         textoLivre: campos.descricao_livre,
         quantidadeTecnicos: num(campos.quantidade_tecnicos) || undefined,
         horasTrabalhadas: num(campos.horas_trabalhadas) || undefined,
+        quantidadeAjudantes: num(campos.quantidade_ajudantes) || undefined,
+        horasAjudantes: num(campos.horas_ajudantes) || undefined,
       })
       if (texto) set('descricao', texto)
     } catch (err) {
@@ -170,6 +196,8 @@ export default function ServicoFormPage() {
     if (!campos.descricao.trim()) next.descricao = 'Descreva o serviço.'
     if (num(campos.quantidade_tecnicos) < 1) next.quantidade_tecnicos = 'Mínimo 1 técnico.'
     if (num(campos.horas_trabalhadas) < 0) next.horas_trabalhadas = 'Valor inválido.'
+    if (num(campos.quantidade_ajudantes) < 0) next.quantidade_ajudantes = 'Valor inválido.'
+    if (num(campos.horas_ajudantes) < 0) next.horas_ajudantes = 'Valor inválido.'
     setErros(next)
     return Object.keys(next).length === 0
   }
@@ -184,10 +212,13 @@ export default function ServicoFormPage() {
       descricao: campos.descricao.trim(),
       descricao_livre: limpar(campos.descricao_livre),
       data_servico: campos.data_servico || null,
-      quantidade_tecnicos: resultado.quantidadeTecnicos || 1,
-      horas_trabalhadas: resultado.horasTrabalhadas,
+      quantidade_tecnicos: resultado.tecnicos.quantidade || 1,
+      horas_trabalhadas: resultado.tecnicos.horas,
       tipo_hora: campos.tipo_hora,
-      valor_hora_aplicado: resultado.valorHora,
+      valor_hora_aplicado: resultado.tecnicos.valorHora,
+      quantidade_ajudantes: resultado.ajudantes.quantidade,
+      horas_ajudantes: resultado.ajudantes.horas,
+      valor_hora_ajudante: resultado.ajudantes.valorHora,
       valor_mao_de_obra: resultado.valorMaoDeObra,
       taxa_deslocamento: num(campos.taxa_deslocamento),
       outros_custos: num(campos.outros_custos),
@@ -303,6 +334,8 @@ export default function ServicoFormPage() {
 
         <Card className="space-y-3">
           <h2 className="text-sm font-semibold text-slate-700">Mão de obra</h2>
+
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Técnicos</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <TextField
               label="Quantidade de técnicos"
@@ -315,7 +348,7 @@ export default function ServicoFormPage() {
               error={erros.quantidade_tecnicos}
             />
             <TextField
-              label="Horas trabalhadas"
+              label="Horas dos técnicos"
               name="horas_trabalhadas"
               type="number"
               min={0}
@@ -341,7 +374,7 @@ export default function ServicoFormPage() {
             </SelectField>
             <div>
               <TextField
-                label="Valor da hora (R$) — opcional"
+                label="Valor da hora do técnico (R$) — opcional"
                 name="valor_hora_aplicado"
                 type="number"
                 min={0}
@@ -358,14 +391,72 @@ export default function ServicoFormPage() {
             </div>
           </div>
 
+          <p className="border-t border-slate-100 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Ajudantes <span className="lowercase text-slate-300">(deixe 0 se trabalhou sozinho)</span>
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="Quantidade de ajudantes"
+              name="quantidade_ajudantes"
+              type="number"
+              min={0}
+              inputMode="numeric"
+              value={campos.quantidade_ajudantes}
+              onChange={(e) => set('quantidade_ajudantes', e.target.value)}
+              error={erros.quantidade_ajudantes}
+            />
+            <TextField
+              label="Horas dos ajudantes"
+              name="horas_ajudantes"
+              type="number"
+              min={0}
+              step="0.5"
+              inputMode="decimal"
+              value={campos.horas_ajudantes}
+              onChange={(e) => set('horas_ajudantes', e.target.value)}
+              error={erros.horas_ajudantes}
+            />
+          </div>
+          <div>
+            <TextField
+              label="Valor da hora do ajudante (R$) — opcional"
+              name="valor_hora_ajudante"
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={campos.valor_hora_ajudante}
+              onChange={(e) => set('valor_hora_ajudante', e.target.value)}
+              placeholder={valorHoraAjudanteConfig ? formatCurrency(valorHoraAjudanteConfig) : '0,00'}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Vazio = usa a configuração (Auxiliar: {formatCurrency(valorHoraAjudanteConfig)}).
+            </p>
+          </div>
+
           {resultado && (
-            <div className="rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-800">
-              {resultado.quantidadeTecnicos} técnico(s) × {resultado.horasTrabalhadas}h ×{' '}
-              {formatCurrency(resultado.valorHora)}
-              {resultado.origemValorHora === 'configuracao' && (
-                <span className="text-brand-500"> (configuração)</span>
-              )}{' '}
-              = <span className="font-bold">{formatCurrency(resultado.valorMaoDeObra)}</span>
+            <div className="space-y-1 rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-800">
+              <div>
+                Técnicos: {resultado.tecnicos.quantidade} × {resultado.tecnicos.horas}h ×{' '}
+                {formatCurrency(resultado.tecnicos.valorHora)}
+                {resultado.tecnicos.origemValorHora === 'configuracao' && (
+                  <span className="text-brand-500"> (config.)</span>
+                )}{' '}
+                = {formatCurrency(resultado.tecnicos.subtotal)}
+              </div>
+              {resultado.ajudantes.quantidade > 0 && resultado.ajudantes.horas > 0 && (
+                <div>
+                  Ajudantes: {resultado.ajudantes.quantidade} × {resultado.ajudantes.horas}h ×{' '}
+                  {formatCurrency(resultado.ajudantes.valorHora)}
+                  {resultado.ajudantes.origemValorHora === 'configuracao' && (
+                    <span className="text-brand-500"> (config.)</span>
+                  )}{' '}
+                  = {formatCurrency(resultado.ajudantes.subtotal)}
+                </div>
+              )}
+              <div className="border-t border-brand-200 pt-1 font-bold">
+                Total mão de obra = {formatCurrency(resultado.valorMaoDeObra)}
+              </div>
             </div>
           )}
         </Card>

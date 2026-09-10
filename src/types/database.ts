@@ -92,6 +92,10 @@ export interface ServicoRow extends Timestamps {
   quantidade_tecnicos: number
   tipo_hora: TipoHora
   valor_hora_aplicado: number
+  /** Equipe (CP24): grupo de ajudantes. 0 ajudante = comportamento anterior. */
+  quantidade_ajudantes: number
+  horas_ajudantes: number
+  valor_hora_ajudante: number
   valor_mao_de_obra: number
   taxa_deslocamento: number
   outros_custos: number
@@ -114,6 +118,13 @@ export interface OrcamentoRow extends Timestamps {
   valor_materiais: number
   valor_margem_materiais: number
   valor_mao_de_obra: number
+  /** Detalhamento opcional da mão de obra (CP24). Se tudo 0, vale só valor_mao_de_obra. */
+  mo_qtd_tecnicos: number
+  mo_horas_tecnicos: number
+  mo_valor_hora_tecnico: number
+  mo_qtd_ajudantes: number
+  mo_horas_ajudantes: number
+  mo_valor_hora_ajudante: number
   valor_deslocamento: number
   outros_custos: number
   valor_total: number

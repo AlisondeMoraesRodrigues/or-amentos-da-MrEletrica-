@@ -9,6 +9,7 @@ Migrations SQL do projeto.
 | `20260906120000_initial_schema.sql` | CP03 | `profiles`, `configuracoes`, `clientes`, `servicos`, `orcamentos`, `materiais`, `documentos` + enums + triggers + RLS |
 | `20260907120000_notas_fiscais.sql` | CP09 | `notas_fiscais` + bucket de Storage `notas-fiscais` (privado) + políticas |
 | `20260907130000_fotos_servico.sql` | CP11 | `fotos_servico` (categorias antes/durante/depois) + bucket `fotos-servicos` (privado) + políticas |
+| `20260910120000_equipe_tecnico_ajudante.sql` | CP24 | Colunas de ajudante em `servicos` + detalhe da mão de obra em `orcamentos` (técnico + ajudante). Só `alter table ... add column if not exists` — seguro rodar em banco já populado. |
 
 ## Tabelas
 
@@ -23,6 +24,20 @@ Migrations SQL do projeto.
 | `documentos` | PDFs gerados (orçamento, ordem de serviço, relatório, recibo). |
 | `notas_fiscais` | Metadados das notas/cupons enviados (arquivo no bucket `notas-fiscais`). |
 | `fotos_servico` | Fotos do serviço por categoria (antes/durante/depois; arquivo no bucket `fotos-servicos`). |
+
+### Equipe (técnico + ajudante) — CP24
+
+`servicos` e `orcamentos` calculam a mão de obra como:
+
+```
+(nº técnicos  × horas técnicos  × R$/h técnico)
++ (nº ajudantes × horas ajudantes × R$/h ajudante)
+```
+
+O R$/h do ajudante vem de `configuracoes.valor_hora_auxiliar` quando não
+informado. Sem ajudante (`quantidade_ajudantes = 0`) o cálculo é igual ao
+anterior. Em `orcamentos`, se as colunas `mo_*` estão todas em 0, vale o campo
+único `valor_mao_de_obra`.
 
 Todas as tabelas têm **RLS** habilitado: cada usuário só acessa os próprios
 registros (`user_id = auth.uid()`).

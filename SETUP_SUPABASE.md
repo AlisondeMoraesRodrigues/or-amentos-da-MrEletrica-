@@ -101,8 +101,23 @@ Na **pasta do projeto** (`aplicativo da MrEletrica`):
   `notas-fiscais` e `fotos-servicos` (ambos **privados** — cadeado fechado).
 - **Authentication → Policies**: cada tabela deve ter políticas (RLS) listadas.
 
-> O arquivo `setup-completo.sql` junta as 3 migrations em uma. Se preferir, dá
+> O arquivo `setup-completo.sql` junta todas as migrations em uma. Se preferir, dá
 > para rodar uma a uma, na ordem do nome, a partir de `supabase/migrations/`.
+
+### Já rodou antes? Atualização do Checkpoint 24
+
+Se o banco já estava criado e você só quer a novidade **técnico + ajudante**,
+rode apenas o arquivo
+**`supabase/migrations/20260910120000_equipe_tecnico_ajudante.sql`**
+(ou o `setup-completo.sql` inteiro de novo — ele é idempotente, não duplica nada).
+São só colunas novas com valor padrão 0; nenhum dado existente é alterado.
+
+### IA para escrever a descrição do serviço (opcional, gratuito)
+
+Sem isso, o app arruma o texto que você digita. Para a IA **escrever sozinha**,
+publique a Edge Function `gerar-descricao` e configure a chave gratuita do
+Google Gemini — passo a passo em
+**`supabase/functions/gerar-descricao/README.md`**.
 
 ---
 

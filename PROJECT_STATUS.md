@@ -1,19 +1,29 @@
 # STATUS DO PROJETO — MR ORÇAMENTOS
 
 Empresa: **MR ELÉTRICA**
-Última atualização: **2026-09-08**
+Última atualização: **2026-09-10**
 
 ## CHECKPOINT ATUAL
 
-**Checkpoint 23 — Finalização e testes** · 🟢 **PROJETO v1.0.0 CONCLUÍDO**
+**Checkpoint 24 — Equipe (técnico + ajudante) + IA real de texto** · 🟢 CONCLUÍDO
 
-Todos os 23 checkpoints foram implementados. Build de produção e lint sem erros
-(527 módulos); PWA gerada; testado no modo demonstração (celular e computador).
+App publicado na Vercel e conectado ao Supabase real
+(`or-amentos-da-mr-eletrica.vercel.app` / projeto `fuwsmbzrhxyolhvznglp`).
 
-**Falta apenas** conectar o Supabase real: aplicar as 3 migrations de
-`supabase/migrations/` e preencher o `.env`. Todo o caminho de produção (Auth,
-banco, Storage) já está implementado — foi validado com dados de demonstração
-(`localStorage`).
+CP24 adiciona o lançamento de **técnico + ajudante juntos** na mão de obra
+(serviço, orçamento e PDFs) e o provedor de IA `edge` (Google Gemini gratuito
+via Edge Function, com fallback para o gerador local). Build e lint sem erros.
+
+**Pendências no Supabase (usuário):**
+1. Rodar `supabase/migrations/20260910120000_equipe_tecnico_ajudante.sql`
+   (ou `setup-completo.sql` de novo — idempotente).
+2. (Opcional) publicar a Edge Function `gerar-descricao` + secret `GEMINI_API_KEY`
+   — ver `supabase/functions/gerar-descricao/README.md`.
+
+### Checkpoints 1–23
+
+Todos implementados. Build de produção e lint sem erros; PWA gerada.
+Caminho de produção (Auth, banco, Storage) validado com o Supabase real.
 
 ### Checkpoints 14–23 (concluídos)
 

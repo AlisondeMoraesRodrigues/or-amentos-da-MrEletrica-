@@ -105,6 +105,8 @@ export default function ServicoDetailPage() {
         })),
         quantidadeTecnicos: s.quantidade_tecnicos,
         horasTrabalhadas: s.horas_trabalhadas,
+        quantidadeAjudantes: s.quantidade_ajudantes || undefined,
+        horasAjudantes: s.horas_ajudantes || undefined,
         clienteNome: data.cliente?.nome ?? null,
       })
       setDescricaoGerada(texto || 'Sem conteúdo para gerar. Preencha as anotações do serviço.')
@@ -265,15 +267,35 @@ export default function ServicoDetailPage() {
 
       <Card>
         <h2 className="mb-1 text-sm font-semibold text-slate-700">Mão de obra</h2>
-        <Linha rotulo="Técnicos" valor={String(servico.quantidade_tecnicos)} />
-        <Linha rotulo="Horas trabalhadas" valor={`${servico.horas_trabalhadas} h`} />
+        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Técnicos</p>
+        <Linha rotulo="Quantidade" valor={String(servico.quantidade_tecnicos)} />
+        <Linha rotulo="Horas" valor={`${servico.horas_trabalhadas} h`} />
         <Linha rotulo="Tipo de hora" valor={TIPO_HORA_META[servico.tipo_hora].label} />
         <Linha rotulo="Valor da hora" valor={formatCurrency(servico.valor_hora_aplicado)} />
-        <Linha rotulo="Total mão de obra" valor={formatCurrency(servico.valor_mao_de_obra)} />
+        {servico.quantidade_ajudantes > 0 && (
+          <>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Ajudantes
+            </p>
+            <Linha rotulo="Quantidade" valor={String(servico.quantidade_ajudantes)} />
+            <Linha rotulo="Horas" valor={`${servico.horas_ajudantes} h`} />
+            <Linha rotulo="Valor da hora" valor={formatCurrency(servico.valor_hora_ajudante)} />
+          </>
+        )}
+        <div className="mt-1 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold text-ink-900">
+          <span>Total mão de obra</span>
+          <span>{formatCurrency(servico.valor_mao_de_obra)}</span>
+        </div>
         <p className="mt-1 text-xs text-slate-400">
-          {servico.quantidade_tecnicos} × {servico.horas_trabalhadas}h ×{' '}
-          {formatCurrency(servico.valor_hora_aplicado)} ={' '}
-          {formatCurrency(servico.valor_mao_de_obra)}
+          Técnicos: {servico.quantidade_tecnicos} × {servico.horas_trabalhadas}h ×{' '}
+          {formatCurrency(servico.valor_hora_aplicado)}
+          {servico.quantidade_ajudantes > 0 && (
+            <>
+              {' '}
+              · Ajudantes: {servico.quantidade_ajudantes} × {servico.horas_ajudantes}h ×{' '}
+              {formatCurrency(servico.valor_hora_ajudante)}
+            </>
+          )}
         </p>
       </Card>
 

@@ -54,9 +54,14 @@ export async function montarOrdemServicoPdf(d: DadosServicoPdf): Promise<PdfDoc>
   pdf.secao('Serviço')
   pdf.linhas([
     ['Data', formatDate(s.data_servico ?? s.created_at)],
-    ['Técnicos', String(s.quantidade_tecnicos)],
-    ['Horas', `${formatNumber(s.horas_trabalhadas)} h`],
+    ['Técnicos', `${s.quantidade_tecnicos} — ${formatNumber(s.horas_trabalhadas)} h`],
     ['Tipo de hora', TIPO_HORA_META[s.tipo_hora].label],
+    ...(s.quantidade_ajudantes > 0
+      ? ([['Ajudantes', `${s.quantidade_ajudantes} — ${formatNumber(s.horas_ajudantes)} h`]] as [
+          string,
+          string,
+        ][])
+      : []),
   ])
   pdf.espaco(1)
   pdf.paragrafo(s.descricao || '-')
@@ -65,8 +70,17 @@ export async function montarOrdemServicoPdf(d: DadosServicoPdf): Promise<PdfDoc>
 
   pdf.secao('Valores')
   const materiaisTotal = d.materiais.reduce((t, m) => t + m.valor_cobrado * m.quantidade, 0)
+  const maoDeObraTecnicos =
+    s.quantidade_tecnicos * s.horas_trabalhadas * s.valor_hora_aplicado
+  const maoDeObraAjudantes =
+    s.quantidade_ajudantes * s.horas_ajudantes * s.valor_hora_ajudante
   pdf.linhas([
-    ['Mão de obra', formatCurrency(s.valor_mao_de_obra)],
+    ...(s.quantidade_ajudantes > 0
+      ? ([
+          ['Mão de obra — técnicos', formatCurrency(maoDeObraTecnicos)],
+          ['Mão de obra — ajudantes', formatCurrency(maoDeObraAjudantes)],
+        ] as [string, string][])
+      : ([['Mão de obra', formatCurrency(s.valor_mao_de_obra)]] as [string, string][])),
     ...(materiaisTotal > 0 ? ([['Materiais', formatCurrency(materiaisTotal)]] as [string, string][]) : []),
     ...(s.taxa_deslocamento > 0
       ? ([['Deslocamento', formatCurrency(s.taxa_deslocamento)]] as [string, string][])
