@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Alert } from '@/components/ui/Alert'
 import { Loading } from '@/components/ui/Loading'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Fab } from '@/components/ui/Fab'
 import { useAsync } from '@/hooks/useAsync'
 import { listOrcamentos } from '@/services/orcamentosService'
 import { listClientes } from '@/services/clientesService'
@@ -28,7 +29,7 @@ export default function OrcamentosPage() {
   )
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20">
       <PageHeader
         title="Orçamentos"
         subtitle={orcamentos.length ? `${orcamentos.length} registrado(s)` : 'Criação e acompanhamento'}
@@ -106,6 +107,8 @@ export default function OrcamentosPage() {
           })}
         </ul>
       )}
+
+      <Fab to="/orcamentos/novo" label="Novo orçamento" />
     </div>
   )
 }

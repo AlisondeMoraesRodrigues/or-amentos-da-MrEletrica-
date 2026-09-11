@@ -5,6 +5,11 @@ Empresa: **MR ELÉTRICA**
 
 ## CHECKPOINT ATUAL
 
+**Checkpoint 26 — Botão flutuante "+ Novo" (FAB)** · 🟢 CONCLUÍDO
+
+FAB amarelo fixo (canto inferior direito) nas telas Serviços, Orçamentos e
+Clientes — atalho sempre visível para criar, otimizado para o celular.
+
 **Checkpoint 25 — Foto no material · Forma de cobrança · Lucro e margem** · 🟢 CONCLUÍDO
 
 App publicado na Vercel e conectado ao Supabase real

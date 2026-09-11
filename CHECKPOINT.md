@@ -1783,3 +1783,26 @@ SQL Editor (ou `setup-completo.sql` de novo). Sem isso, **abrir** as telas
 funciona, mas **salvar** serviço/material/orçamento dá erro de coluna inexistente.
 
 🟢 **CHECKPOINT 25 CONCLUÍDO**.
+
+---
+
+# CHECKPOINT 26 — BOTÃO FLUTUANTE "+ NOVO" (FAB)
+
+> Pedido: deixar o "+ Novo serviço" fácil de achar no celular.
+
+- Novo componente `src/components/ui/Fab.tsx` — botão flutuante (amarelo, com
+  ícone +) fixo no canto inferior direito, **acima do menu do celular**
+  (`bottom-20` no mobile, `bottom-8` no desktop). `active:scale-95` para toque.
+- Adicionado nas 3 telas de lista, cada uma com seu destino:
+  - **Serviços** → "Novo serviço" (`/servicos/novo`)
+  - **Orçamentos** → "Novo orçamento" (`/orcamentos/novo`)
+  - **Clientes** → "Novo cliente" (`/clientes/novo`)
+- O botão "+ Novo" do cabeçalho continua; o FAB é um atalho sempre visível.
+- Container de cada lista ganhou `pb-20` para o botão não cobrir o último item.
+
+## Verificação
+- `npm run build` / `npm run lint` — **0 erros / 0 warnings**.
+- Testado em 375px (celular): FAB aparece acima da barra de navegação, o toque
+  abre `/servicos/novo` ✔.
+
+🟢 **CHECKPOINT 26 CONCLUÍDO**.

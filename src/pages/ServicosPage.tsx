@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Alert } from '@/components/ui/Alert'
 import { Loading } from '@/components/ui/Loading'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Fab } from '@/components/ui/Fab'
 import { useAsync } from '@/hooks/useAsync'
 import { listServicos } from '@/services/servicosService'
 import { listClientes } from '@/services/clientesService'
@@ -31,7 +32,7 @@ export default function ServicosPage() {
   )
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20">
       <PageHeader
         title="Serviços"
         subtitle={servicos.length ? `${servicos.length} registrado(s)` : 'Horas, técnicos e mão de obra'}
@@ -110,6 +111,8 @@ export default function ServicosPage() {
           })}
         </ul>
       )}
+
+      <Fab to="/servicos/novo" label="Novo serviço" />
     </div>
   )
 }

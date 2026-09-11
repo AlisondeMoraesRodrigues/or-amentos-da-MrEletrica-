@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/Card'
 import { Alert } from '@/components/ui/Alert'
 import { Loading } from '@/components/ui/Loading'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Fab } from '@/components/ui/Fab'
 import { useAsync } from '@/hooks/useAsync'
 import { listClientes } from '@/services/clientesService'
 import type { ClienteRow } from '@/types/database'
@@ -39,7 +40,7 @@ export default function ClientesPage() {
   }, [busca, clientes])
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20">
       <PageHeader
         title="Clientes"
         subtitle={clientes.length ? `${clientes.length} cadastrado(s)` : 'Cadastro e histórico'}
@@ -113,6 +114,8 @@ export default function ClientesPage() {
       <Button variant="ghost" fullWidth onClick={reload} disabled={loading}>
         Atualizar lista
       </Button>
+
+      <Fab to="/clientes/novo" label="Novo cliente" />
     </div>
   )
 }
