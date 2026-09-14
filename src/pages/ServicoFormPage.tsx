@@ -132,6 +132,11 @@ export default function ServicoFormPage() {
   const [nomeClienteDigitado, setNomeClienteDigitado] = useState('')
   const [clientesExtras, setClientesExtras] = useState<ClienteRow[]>([])
 
+  // Equipe e deslocamento vêm fechados por padrão (a maioria dos serviços não
+  // usa) — abrem com 1 toque, ou sozinhos quando já existem dados salvos.
+  const [mostrarEquipe, setMostrarEquipe] = useState(false)
+  const [mostrarDeslocamento, setMostrarDeslocamento] = useState(false)
+
   useEffect(() => {
     if (!id) return
     let ativo = true
@@ -169,6 +174,9 @@ export default function ServicoFormPage() {
           status: s.status,
         })
         setServicoIdAtual(s.id)
+        if (s.km_inicial || s.km_final || s.combustivel_valor || s.pedagio || s.estacionamento_valor) {
+          setMostrarDeslocamento(true)
+        }
       })
       .catch((e: unknown) =>
         setErroCarga(e instanceof Error ? e.message : 'Não foi possível carregar o serviço.'),
@@ -184,6 +192,10 @@ export default function ServicoFormPage() {
   function set<K extends keyof Campos>(chave: K, valor: Campos[K]) {
     setCampos((c) => ({ ...c, [chave]: valor }))
   }
+
+  useEffect(() => {
+    if (equipe.length > 0) setMostrarEquipe(true)
+  }, [equipe])
 
   const recarregarMateriais = useCallback(() => {
     if (!servicoIdAtual) return
@@ -497,79 +509,101 @@ export default function ServicoFormPage() {
           </Card>
         )}
 
-        <EquipeServicoEditor
-          servicoId={servicoIdAtual}
-          onNeedServicoId={ensureServicoDraft}
-          diariaPadrao={apoio?.config.diaria_padrao ?? 130}
-          onEquipeChange={setEquipe}
-        />
+        {mostrarEquipe ? (
+          <EquipeServicoEditor
+            servicoId={servicoIdAtual}
+            onNeedServicoId={ensureServicoDraft}
+            diariaPadrao={apoio?.config.diaria_padrao ?? 130}
+            onEquipeChange={setEquipe}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setMostrarEquipe(true)}
+            className="card flex w-full items-center justify-between text-left text-sm font-semibold text-ink-900"
+          >
+            👷 Tem ajudante ou funcionário neste serviço?
+            <span className="text-brand-600">+ Adicionar equipe</span>
+          </button>
+        )}
 
-        <Card className="space-y-3">
-          <h2 className="text-sm font-semibold text-slate-700">🚚 Deslocamento e combustível</h2>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <TextField
-              label="KM inicial"
-              type="number"
-              min={0}
-              step="0.1"
-              inputMode="decimal"
-              value={campos.km_inicial}
-              onChange={(e) => set('km_inicial', e.target.value)}
-            />
-            <TextField
-              label="KM final"
-              type="number"
-              min={0}
-              step="0.1"
-              inputMode="decimal"
-              value={campos.km_final}
-              onChange={(e) => set('km_final', e.target.value)}
-            />
-          </div>
-          {kmRodados !== null && (
-            <p className="text-xs text-slate-400">{formatNumber(kmRodados, 1)} km rodados.</p>
-          )}
-          <div className="grid gap-3 sm:grid-cols-3">
-            <TextField
-              label="Combustível (R$)"
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              value={campos.combustivel_valor}
-              onChange={(e) => set('combustivel_valor', e.target.value)}
-            />
-            <TextField
-              label="Pedágio (R$)"
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              value={campos.pedagio}
-              onChange={(e) => set('pedagio', e.target.value)}
-            />
-            <TextField
-              label="Estacionamento (R$)"
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              value={campos.estacionamento_valor}
-              onChange={(e) => set('estacionamento_valor', e.target.value)}
-            />
-          </div>
-          {apoio && apoio.config.gasto_semanal_camionete > 0 && (
-            <p className="text-xs text-slate-400">
-              Orçamento semanal da camionete: {formatCurrency(apoio.config.gasto_semanal_camionete)}{' '}
-              (ajuste em Configurações). Esse valor não é lançado automaticamente aqui.
-            </p>
-          )}
-          {custoDeslocamentoInterno > 0 && (
-            <p className="text-sm font-semibold text-ink-900">
-              Custo de deslocamento: {formatCurrency(custoDeslocamentoInterno)}
-            </p>
-          )}
-        </Card>
+        {mostrarDeslocamento ? (
+          <Card className="space-y-3">
+            <h2 className="text-sm font-semibold text-slate-700">🚚 Deslocamento e combustível</h2>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TextField
+                label="KM inicial"
+                type="number"
+                min={0}
+                step="0.1"
+                inputMode="decimal"
+                value={campos.km_inicial}
+                onChange={(e) => set('km_inicial', e.target.value)}
+              />
+              <TextField
+                label="KM final"
+                type="number"
+                min={0}
+                step="0.1"
+                inputMode="decimal"
+                value={campos.km_final}
+                onChange={(e) => set('km_final', e.target.value)}
+              />
+            </div>
+            {kmRodados !== null && (
+              <p className="text-xs text-slate-400">{formatNumber(kmRodados, 1)} km rodados.</p>
+            )}
+            <div className="grid gap-3 sm:grid-cols-3">
+              <TextField
+                label="Combustível (R$)"
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                value={campos.combustivel_valor}
+                onChange={(e) => set('combustivel_valor', e.target.value)}
+              />
+              <TextField
+                label="Pedágio (R$)"
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                value={campos.pedagio}
+                onChange={(e) => set('pedagio', e.target.value)}
+              />
+              <TextField
+                label="Estacionamento (R$)"
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                value={campos.estacionamento_valor}
+                onChange={(e) => set('estacionamento_valor', e.target.value)}
+              />
+            </div>
+            {apoio && apoio.config.gasto_semanal_camionete > 0 && (
+              <p className="text-xs text-slate-400">
+                Orçamento semanal da camionete: {formatCurrency(apoio.config.gasto_semanal_camionete)}{' '}
+                (ajuste em Configurações). Esse valor não é lançado automaticamente aqui.
+              </p>
+            )}
+            {custoDeslocamentoInterno > 0 && (
+              <p className="text-sm font-semibold text-ink-900">
+                Custo de deslocamento: {formatCurrency(custoDeslocamentoInterno)}
+              </p>
+            )}
+          </Card>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setMostrarDeslocamento(true)}
+            className="card flex w-full items-center justify-between text-left text-sm font-semibold text-ink-900"
+          >
+            🚚 Teve gasto de deslocamento?
+            <span className="text-brand-600">+ Adicionar</span>
+          </button>
+        )}
 
         <Card className="space-y-3">
           <h2 className="text-sm font-semibold text-slate-700">Mão de obra</h2>

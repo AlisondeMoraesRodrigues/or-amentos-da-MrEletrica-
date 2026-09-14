@@ -2003,3 +2003,24 @@ CHECKPOINT 27 CONCLUÍDO — AGUARDANDO TESTE NO SUPABASE REAL DO USUÁRIO
 modo demonstração. Nenhuma funcionalidade anterior foi alterada ou quebrada.
 
 Conforme solicitado: não avancei para nenhum outro checkpoint. Aguardando autorização.
+
+---
+
+## Ajuste no CHECKPOINT 27 — Equipe e Deslocamento recolhidos por padrão
+
+Depois de revisar a tela "Novo serviço" no celular, as seções **Equipe** e
+**Deslocamento e combustível** ficaram grandes demais pra quem faz um serviço
+simples (sem ajudante, sem carro). Agora elas vêm **fechadas** por padrão,
+mostrando só uma pergunta de 1 linha:
+
+- "Tem ajudante ou funcionário neste serviço? + Adicionar equipe"
+- "Teve gasto de deslocamento? + Adicionar"
+
+Um toque abre a seção completa. Se o serviço (editar) já tem equipe ou
+deslocamento salvo, a seção abre sozinha. Testado no celular (375px): a tela
+ficou bem mais curta pro caso comum (Cliente → Descrição → Materiais → Mão de
+obra → Resumo → Salvar).
+
+`npm run build` / `npm run lint` / `npx tsc` — 0 erros.
+
+Arquivo modificado: `src/pages/ServicoFormPage.tsx`.
