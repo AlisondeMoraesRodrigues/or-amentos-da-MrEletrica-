@@ -60,6 +60,11 @@ export async function createServico(input: NovoServico): Promise<ServicoRow> {
       outros_custos: input.outros_custos ?? 0,
       status: input.status ?? 'aberto',
       data_servico: input.data_servico ?? null,
+      km_inicial: input.km_inicial ?? null,
+      km_final: input.km_final ?? null,
+      combustivel_valor: input.combustivel_valor ?? 0,
+      pedagio: input.pedagio ?? 0,
+      estacionamento_valor: input.estacionamento_valor ?? 0,
       created_at: ts,
       updated_at: ts,
     }

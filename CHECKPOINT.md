@@ -1806,3 +1806,200 @@ funciona, mas **salvar** serviço/material/orçamento dá erro de coluna inexist
   abre `/servicos/novo` ✔.
 
 🟢 **CHECKPOINT 26 CONCLUÍDO**.
+
+
+---
+
+# CHECKPOINT 27 — NOVO SERVIÇO INTELIGENTE
+
+> Pedido do usuário como "CHECKPOINT 05 — Novo Serviço Inteligente". Numerado
+> como **27** para manter a sequência real do projeto (23 checkpoints do
+> escopo original + CP24, CP25, CP26 já entregues). Nada anterior foi
+> recriado ou apagado — só adicionado.
+
+Transforma `/servicos/novo` no ponto de entrada principal do serviço: cliente
+(buscar ou cadastrar na hora), foto da nota de materiais (câmera ou galeria)
+com leitura e histórico de preços, equipe com diária, deslocamento/combustível
+e um resumo com lucro estimado — tudo sem sair da tela, otimizado para celular.
+
+## 1. Cliente sem sair da tela
+
+- `src/components/cliente/ClienteSeletor.tsx` — campo de busca (nome, CPF/CNPJ,
+  telefone, WhatsApp, condomínio) com lista suspensa; opção fixa "+ Novo
+  cliente" no topo da lista.
+- `src/components/cliente/ClienteQuickCreateModal.tsx` — cadastro rápido em
+  tela cheia (mesmos campos do cadastro completo), sem navegar para outra
+  rota. Ao salvar: cria o cliente, seleciona automaticamente no serviço e
+  fecha — nada do que já estava preenchido no serviço é perdido (o
+  formulário do serviço fica montado por trás, intocado).
+
+## 2. Foto da nota de materiais (câmera ou galeria)
+
+- `src/components/servico/NotaMaterialCapture.tsx` — fluxo completo embutido:
+  1. "Tirar foto da nota" (`capture="environment"`, abre a câmera no
+     celular) ou "Escolher da galeria" (sem `capture`).
+  2. Prévia da imagem — Usar esta foto / Tirar outra / Cancelar.
+  3. Ao confirmar, a foto é enviada como nota fiscal (reaproveita
+     `notasFiscaisService`, criado no CP09) e associada ao serviço.
+  4. Texto da nota (digitado/colado) → "Extrair itens" reaproveita o
+     `ocrService` já existente (CP10, `interpretarTextoNota`) — regra 10: sem
+     OCR de imagem pago por padrão; se um provedor de imagem for registrado no
+     futuro (`setOCRProvider`), o mesmo fluxo passa a usá-lo automaticamente.
+  5. "Materiais identificados" — lista 100% editável (nome, código,
+     quantidade, unidade, valor) + "+ Adicionar material" manual +
+     Excluir por item + total da nota.
+  6. "Confirmar e salvar materiais" — grava cada item no serviço e no
+     catálogo (abaixo).
+
+## 3. Catálogo de materiais + histórico de preços
+
+- `src/services/lojasService.ts` — acha ou cria a loja pelo nome.
+- `src/services/materiaisCatalogoService.ts` — `registrarCompra(...)`: acha o
+  produto no catálogo (por SKU, senão por nome) ou cria um novo; grava a
+  compra em `materiais_compras` (nunca apaga histórico); recalcula
+  último/maior/menor/médio a partir de todas as compras.
+- Preço de referência (`configuracoes.preco_referencia_material`, padrão
+  maior preço histórico): o valor sugerido ao cliente = referência × margem —
+  o custo real da compra atual fica gravado separado e nunca é sobrescrito.
+  Testado: 1ª compra R$ 45 → sugerido R$ 54 (margem 20%); 2ª compra do mesmo
+  item a R$ 38 → sugerido continua R$ 54 (usa o maior histórico da 1ª
+  compra), custo real da 2ª linha registrado como R$ 38.
+- Configurável em Configurações → Preço de referência do material
+  (último / médio / maior / menor / personalizado).
+
+## 4. Equipe (funcionários com diária)
+
+- `src/services/funcionariosService.ts` — CRUD de funcionários (nome, valor da
+  diária, ativo).
+- `src/services/servicoFuncionariosService.ts` — equipe alocada num serviço
+  (funcionário, diárias, horas opcionais, valor da diária aplicado, custo).
+- `src/components/servico/EquipeServicoEditor.tsx` — escolhe funcionário
+  existente + diárias/horas → "+ Adicionar à equipe"; "+ Novo funcionário"
+  inline (nome + diária, padrão configurável em `configuracoes.diaria_padrao`,
+  130 por padrão). Custo interno, não cobrado do cliente.
+
+## 5. Deslocamento e combustível
+
+- `servicos` ganhou `km_inicial`, `km_final` (km rodados calculado na tela),
+  `combustivel_valor`, `pedagio`, `estacionamento_valor` — custo interno por
+  serviço.
+- `configuracoes.gasto_semanal_camionete` (padrão R$ 350) é só uma referência
+  exibida — não é lançado automaticamente em cada serviço, como pedido.
+
+## 6. Lucro e resumo
+
+- Card Resumo no formulário do serviço: cliente, materiais, mão de obra,
+  deslocamento/outros cobrados, valor total do cliente; e, só para o
+  usuário, custo de materiais + equipe + combustível + despesas → custo
+  total e resultado estimado (%).
+- `ServicoDetailPage` — o card "Lucro e margem" (do CP25) passou a somar
+  também o custo da equipe e do deslocamento/combustível, batendo com o
+  resumo mostrado na criação.
+- Rascunho automático: a primeira vez que uma foto de material ou um
+  funcionário é adicionado, o serviço é criado em segundo plano
+  (`ensureServicoDraft`) — nada se perde se o usuário sair da tela.
+- `ServicoDetailPage` mostra um aviso "Serviço salvo com sucesso" ao
+  voltar do formulário.
+
+## Banco de dados
+
+Nova migration
+`supabase/migrations/20260914120000_notas_materiais_equipe_deslocamento.sql`
+(incluída em `setup-completo.sql`):
+
+- Tabelas novas: `lojas`, `materiais_catalogo`, `materiais_compras`,
+  `funcionarios`, `servico_funcionarios` — todas com RLS (dono = `user_id`).
+- `materiais` +: `codigo`, `sku`, `material_catalogo_id`.
+- `servicos` +: `km_inicial`, `km_final`, `combustivel_valor`, `pedagio`,
+  `estacionamento_valor`.
+- `configuracoes` +: `diaria_padrao`, `gasto_semanal_camionete`,
+  `preco_referencia_material` (+ `check`).
+- Só `create table if not exists` / `add column if not exists` — nenhuma
+  tabela ou coluna anterior foi alterada de forma destrutiva.
+
+## Arquivos criados
+
+```
+supabase/migrations/20260914120000_notas_materiais_equipe_deslocamento.sql
+src/services/lojasService.ts
+src/services/materiaisCatalogoService.ts
+src/services/funcionariosService.ts
+src/services/servicoFuncionariosService.ts
+src/components/cliente/ClienteSeletor.tsx
+src/components/cliente/ClienteQuickCreateModal.tsx
+src/components/servico/NotaMaterialCapture.tsx
+src/components/servico/EquipeServicoEditor.tsx
+```
+
+## Arquivos modificados
+
+```
+src/types/database.ts        + LojaRow/MaterialCatalogoRow/MaterialCompraRow/
+                                FuncionarioRow/ServicoFuncionarioRow + campos novos
+                                em MaterialRow/ServicoRow/ConfiguracaoRow
+src/config/material.ts       + PRECO_REFERENCIA_META/ORDEM
+src/services/servicosService.ts   defaults dos campos de deslocamento (demo)
+src/services/materiaisService.ts  defaults de codigo/sku/catalogo (demo)
+src/services/demoSeed.ts     seeds atualizados com os campos novos
+src/pages/ServicoFormPage.tsx     reescrita: cliente/materiais/equipe/
+                                   deslocamento/resumo embutidos, rascunho automático
+src/pages/ServicoDetailPage.tsx   lucro agora soma equipe + deslocamento;
+                                   aviso de "salvo com sucesso"
+src/pages/ConfiguracoesPage.tsx   + diária padrão, gasto semanal, preço de referência
+src/lib/supabase.ts           correção defensiva: fallback do client usa `||`
+                               em vez de `??` (uma env var vazia não quebra mais)
+CHECKPOINT.md / PROJECT_STATUS.md / supabase/README.md
+```
+
+## Testes executados (navegador, modo demonstração — ambiente real ainda sem a migration)
+
+| Teste | Resultado |
+| ----- | --------- |
+| Abrir `/servicos/novo`: todas as seções aparecem na ordem (Cliente, Serviço, Materiais, Equipe, Deslocamento, Mão de obra, Outros custos, Resumo) | OK |
+| Buscar cliente existente por nome parcial ("Condomínio") | OK - acha e mostra |
+| Selecionar cliente da lista | OK - preenche o campo |
+| "+ Novo cliente" com nome pré-preenchido pela busca; descrição do serviço já digitada não se perde | OK - cliente criado, selecionado automaticamente, descrição intacta |
+| Tirar "foto" (arquivo simulado) → prévia → "Usar esta foto" | OK - nota fiscal criada, avança para o texto |
+| Colar texto de 2 itens → "Extrair itens" | OK - 2 itens reconhecidos com valores corretos |
+| "Confirmar e salvar materiais" | OK - 2 materiais criados (R$ 210 e R$ 162), catálogo e histórico de preço criados, loja "Ferragem Boa Vista" criada |
+| 2ª compra do mesmo produto (nome), preço mais baixo (R$ 38 vs R$ 45) | OK - catálogo atualizado: maior R$ 45, menor R$ 38, médio R$ 41,50, último R$ 38 |
+| Preço sugerido da 2ª compra | OK - manteve R$ 54 (maior histórico da 1ª compra) mesmo com custo real de R$ 38 — custo real gravado separado |
+| "+ Novo funcionário" (nome, diária padrão R$ 130) → "+ Adicionar à equipe" | OK - funcionário criado e alocado, 1 diária × R$ 130 |
+| Preencher combustível R$ 50 | OK - Resumo recalcula na hora |
+| Conferir Resumo: materiais R$ 480, custo materiais R$ 386, custo equipe R$ 130, custo combustível R$ 50, custo total R$ 566, resultado -R$ 86 (-17,9%) | OK - todos os valores batem com o esperado |
+| Salvar serviço | OK - redireciona para o serviço, aviso "Serviço salvo com sucesso" |
+| Reabrir o serviço (reload da página) | OK - 3 materiais, 2 notas fiscais e o resumo de lucro (agora somando equipe + combustível) continuam salvos |
+| "Ler itens" numa nota antiga (fluxo do CP10, fora do formulário) | OK - continua funcionando sem alteração |
+| `npm run build` | OK - 0 erros / 0 warnings |
+| `npm run lint` | OK - 0 erros / 0 warnings |
+| `npx tsc` (typecheck) | OK - 0 erros |
+
+## Problemas encontrados e corrigidos
+
+| Problema | Correção |
+| -------- | -------- |
+| `useMemo` da lista de clientes ficou depois de um `return` condicional (quebra a regra dos hooks) | Movido para antes dos retornos condicionais |
+| `src/lib/supabase.ts`: `createClient(url ?? 'placeholder', ...)` não protege contra `url` sendo string vazia (`??` só cobre `null`/`undefined`) — o mesmo tipo de bug que já causou tela branca num checkpoint anterior | Trocado para `||`, que também cobre string vazia |
+
+## Pendências
+
+1. Rodar a migration no Supabase real: `20260914120000_notas_materiais_equipe_deslocamento.sql`
+   (ou `setup-completo.sql` de novo). Sem isso, salvar serviço/material/orçamento
+   com os campos novos falha por coluna/tabela inexistente — só testado em
+   modo demonstração nesta sessão (não tenho acesso ao projeto Supabase real
+   do usuário para aplicar migrations).
+2. OCR de imagem continua manual (usuário digita/cola o texto da nota) —
+   é o mesmo comportamento do CP10; ler a foto automaticamente é o pedido do
+   "segundo prompt" do usuário (ainda não implementado, aguardando análise).
+3. Sem tela dedicada de gestão de funcionários/lojas (CRUD completo) — hoje só
+   dá para criar/usar dentro do serviço; edição/inativação ficaria para um
+   checkpoint futuro se for necessário.
+4. `materiais_compras`/`materiais_catalogo` ainda não aparecem em nenhum
+   relatório (ex.: "custos do serviço" agregando notas por documento) — é
+   parte do "segundo prompt" do usuário.
+
+CHECKPOINT 27 CONCLUÍDO — AGUARDANDO TESTE NO SUPABASE REAL DO USUÁRIO
+(depois de rodar a migration). Build/lint/typecheck limpos; testado a fundo em
+modo demonstração. Nenhuma funcionalidade anterior foi alterada ou quebrada.
+
+Conforme solicitado: não avancei para nenhum outro checkpoint. Aguardando autorização.

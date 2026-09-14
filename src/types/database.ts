@@ -22,6 +22,8 @@ export type MaterialUnidade = 'un' | 'm' | 'm2' | 'kg' | 'cx' | 'rl' | 'pc' | 'l
 export type TipoHora = 'tecnica' | 'auxiliar' | 'emergencia' | 'noturna'
 /** Forma de cobrança da mão de obra (CP25). */
 export type FormaCobranca = 'hora' | 'diaria' | 'fechado'
+/** Como sugerir o preço de venda do material a partir do histórico (CP27). */
+export type PrecoReferencia = 'ultimo' | 'medio' | 'maior' | 'menor' | 'personalizado'
 
 type Timestamps = {
   created_at: string
@@ -55,6 +57,10 @@ export interface ConfiguracaoRow extends Timestamps {
   pix_beneficiario: string | null
   pix_chave: string | null
   pix_cidade: string | null
+  /** CP27: diária padrão da equipe, orçamento semanal de combustível e referência de preço. */
+  diaria_padrao: number
+  gasto_semanal_camionete: number
+  preco_referencia_material: PrecoReferencia
 }
 export type ConfiguracaoInsert = { user_id: string } & Partial<
   Omit<ConfiguracaoRow, 'user_id' | keyof Timestamps>
@@ -107,6 +113,12 @@ export interface ServicoRow extends Timestamps {
   outros_custos: number
   status: ServicoStatus
   data_servico: string | null
+  /** CP27: deslocamento/combustível detalhado (custo interno, não cobrado do cliente). */
+  km_inicial: number | null
+  km_final: number | null
+  combustivel_valor: number
+  pedagio: number
+  estacionamento_valor: number
 }
 export type ServicoInsert = { user_id: string } & Partial<
   Omit<ServicoRow, 'id' | 'user_id' | keyof Timestamps>
@@ -163,12 +175,103 @@ export interface MaterialRow extends Timestamps {
   foto_path: string | null
   foto_nome: string | null
   foto_tipo: string | null
+  /** CP27: ligação com o catálogo (histórico de preços). */
+  codigo: string | null
+  sku: string | null
+  material_catalogo_id: string | null
 }
 export type MaterialInsert = {
   user_id: string
   nome: string
 } & Partial<Omit<MaterialRow, 'id' | 'user_id' | 'nome' | keyof Timestamps>>
 export type MaterialUpdate = Partial<Omit<MaterialInsert, 'user_id'>>
+
+// --- lojas (CP27) -----------------------------------------------------
+export interface LojaRow extends Timestamps {
+  id: string
+  user_id: string
+  nome: string
+  cnpj: string | null
+}
+export type LojaInsert = { user_id: string; nome: string } & Partial<
+  Omit<LojaRow, 'id' | 'user_id' | 'nome' | keyof Timestamps>
+>
+export type LojaUpdate = Partial<Omit<LojaInsert, 'user_id'>>
+
+// --- materiais_catalogo (CP27) — catálogo com histórico de preços -----
+export interface MaterialCatalogoRow extends Timestamps {
+  id: string
+  user_id: string
+  nome: string
+  codigo: string | null
+  sku: string | null
+  marca: string | null
+  unidade: MaterialUnidade
+  loja_id: string | null
+  ultimo_preco: number
+  maior_preco: number
+  menor_preco: number
+  preco_medio: number
+  ultima_compra_em: string | null
+}
+export type MaterialCatalogoInsert = { user_id: string; nome: string } & Partial<
+  Omit<MaterialCatalogoRow, 'id' | 'user_id' | 'nome' | keyof Timestamps>
+>
+export type MaterialCatalogoUpdate = Partial<Omit<MaterialCatalogoInsert, 'user_id'>>
+
+// --- materiais_compras (CP27) — uma linha por compra (histórico) ------
+export interface MaterialCompraRow {
+  id: string
+  user_id: string
+  material_catalogo_id: string
+  nota_fiscal_id: string | null
+  servico_id: string | null
+  quantidade: number
+  valor_unitario: number
+  valor_total: number
+  data_compra: string
+  created_at: string
+}
+export type MaterialCompraInsert = {
+  user_id: string
+  material_catalogo_id: string
+} & Partial<Omit<MaterialCompraRow, 'id' | 'user_id' | 'material_catalogo_id' | 'created_at'>>
+export type MaterialCompraUpdate = Partial<Omit<MaterialCompraInsert, 'user_id'>>
+
+// --- funcionarios (CP27) — equipe com diária ---------------------------
+export interface FuncionarioRow extends Timestamps {
+  id: string
+  user_id: string
+  nome: string
+  valor_diaria: number
+  ativo: boolean
+}
+export type FuncionarioInsert = { user_id: string; nome: string } & Partial<
+  Omit<FuncionarioRow, 'id' | 'user_id' | 'nome' | keyof Timestamps>
+>
+export type FuncionarioUpdate = Partial<Omit<FuncionarioInsert, 'user_id'>>
+
+// --- servico_funcionarios (CP27) — equipe alocada num serviço ---------
+export interface ServicoFuncionarioRow {
+  id: string
+  user_id: string
+  servico_id: string
+  funcionario_id: string | null
+  nome_funcionario: string
+  quantidade_dias: number
+  quantidade_horas: number
+  valor_diaria_aplicado: number
+  custo: number
+  created_at: string
+}
+export type ServicoFuncionarioInsert = {
+  user_id: string
+  servico_id: string
+  nome_funcionario: string
+} & Partial<
+  Omit<ServicoFuncionarioRow, 'id' | 'user_id' | 'servico_id' | 'nome_funcionario' | 'created_at'>
+>
+export type ServicoFuncionarioUpdate = Partial<Omit<ServicoFuncionarioInsert, 'user_id'>>
 
 // --- documentos ------------------------------------------------------
 export interface DocumentoRow {
@@ -261,6 +364,15 @@ export interface Database {
       documentos: TableShape<DocumentoRow, DocumentoInsert, DocumentoUpdate>
       notas_fiscais: TableShape<NotaFiscalRow, NotaFiscalInsert, NotaFiscalUpdate>
       fotos_servico: TableShape<FotoServicoRow, FotoServicoInsert, FotoServicoUpdate>
+      lojas: TableShape<LojaRow, LojaInsert, LojaUpdate>
+      materiais_catalogo: TableShape<MaterialCatalogoRow, MaterialCatalogoInsert, MaterialCatalogoUpdate>
+      materiais_compras: TableShape<MaterialCompraRow, MaterialCompraInsert, MaterialCompraUpdate>
+      funcionarios: TableShape<FuncionarioRow, FuncionarioInsert, FuncionarioUpdate>
+      servico_funcionarios: TableShape<
+        ServicoFuncionarioRow,
+        ServicoFuncionarioInsert,
+        ServicoFuncionarioUpdate
+      >
     }
     Views: Record<never, never>
     Functions: Record<never, never>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -17,6 +17,7 @@ import { AIService } from '@/services/aiService'
 import { getCliente } from '@/services/clientesService'
 import { deleteMaterial, listMateriais, updateMaterial } from '@/services/materiaisService'
 import { getUrlFotoMaterial } from '@/services/materialFotoService'
+import { listEquipeServico } from '@/services/servicoFuncionariosService'
 import { FORMA_COBRANCA_META, SERVICO_STATUS_META, TIPO_HORA_META } from '@/config/servico'
 import { MARGENS_PRESET } from '@/config/material'
 import { aplicarMargem } from '@/utils/margem'
@@ -29,6 +30,7 @@ interface Detalhe {
   cliente: ClienteRow | null
   materiais: MaterialRow[]
   fotosMateriais: Record<string, string | null>
+  custoEquipe: number
 }
 
 function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
@@ -43,6 +45,10 @@ function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
 export default function ServicoDetailPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [mostrarSucesso, setMostrarSucesso] = useState(
+    Boolean((location.state as { salvo?: boolean } | null)?.salvo),
+  )
   const [excluindo, setExcluindo] = useState(false)
   const [erroExcluir, setErroExcluir] = useState('')
   const [aplicandoMargem, setAplicandoMargem] = useState(false)
@@ -54,11 +60,12 @@ export default function ServicoDetailPage() {
   const { data, loading, error, reload } = useAsync<Detalhe>(async () => {
     const servico = await getServico(id)
     if (!servico) {
-      return { servico: null, cliente: null, materiais: [], fotosMateriais: {} }
+      return { servico: null, cliente: null, materiais: [], fotosMateriais: {}, custoEquipe: 0 }
     }
-    const [cliente, materiais] = await Promise.all([
+    const [cliente, materiais, equipe] = await Promise.all([
       servico.cliente_id ? getCliente(servico.cliente_id) : Promise.resolve(null),
       listMateriais({ servicoId: id }),
+      listEquipeServico(id).catch(() => []),
     ])
     const fotosMateriais: Record<string, string | null> = {}
     await Promise.all(
@@ -68,7 +75,8 @@ export default function ServicoDetailPage() {
           fotosMateriais[m.id] = await getUrlFotoMaterial(m.foto_path as string).catch(() => null)
         }),
     )
-    return { servico, cliente, materiais, fotosMateriais }
+    const custoEquipe = equipe.reduce((s, e) => s + e.custo, 0)
+    return { servico, cliente, materiais, fotosMateriais, custoEquipe }
   }, [id])
 
   async function handleExcluirMaterial(materialId: string) {
@@ -214,7 +222,7 @@ export default function ServicoDetailPage() {
     )
   }
 
-  const { servico, cliente, materiais, fotosMateriais } = data
+  const { servico, cliente, materiais, fotosMateriais, custoEquipe } = data
   const meta = SERVICO_STATUS_META[servico.status]
   const totalMateriais = materiais.reduce((s, m) => s + m.valor_cobrado * m.quantidade, 0)
   const totalMateriaisCusto = materiais.reduce((s, m) => s + m.valor_custo * m.quantidade, 0)
@@ -222,13 +230,16 @@ export default function ServicoDetailPage() {
     servico.valor_mao_de_obra + servico.taxa_deslocamento + servico.outros_custos + totalMateriais
   const forma = servico.forma_cobranca ?? 'hora'
   const formaMeta = FORMA_COBRANCA_META[forma]
+  const custoDeslocamentoInterno =
+    (servico.combustivel_valor ?? 0) + (servico.pedagio ?? 0) + (servico.estacionamento_valor ?? 0)
+  const custoInterno = (servico.custo_mao_de_obra ?? 0) + custoEquipe + custoDeslocamentoInterno
   const lucro = calcularLucro({
     maoDeObraCobrada: servico.valor_mao_de_obra,
     materiaisCobrado: totalMateriais,
     materiaisCusto: totalMateriaisCusto,
     deslocamento: servico.taxa_deslocamento,
     outrosCustos: servico.outros_custos,
-    custoMaoDeObra: servico.custo_mao_de_obra ?? 0,
+    custoMaoDeObra: custoInterno,
   })
 
   return (
@@ -242,6 +253,19 @@ export default function ServicoDetailPage() {
           </Link>
         }
       />
+
+      {mostrarSucesso && (
+        <Alert tone="success">
+          Serviço salvo com sucesso.{' '}
+          <button
+            type="button"
+            onClick={() => setMostrarSucesso(false)}
+            className="font-semibold underline"
+          >
+            Ok
+          </button>
+        </Alert>
+      )}
 
       {erroExcluir && <Alert tone="error">{erroExcluir}</Alert>}
 
@@ -455,9 +479,21 @@ export default function ServicoDetailPage() {
           <span>Custo dos materiais</span>
           <span className="font-medium">− {formatCurrency(totalMateriaisCusto)}</span>
         </div>
+        {custoEquipe > 0 && (
+          <div className="flex justify-between">
+            <span>Custo da equipe</span>
+            <span className="font-medium">− {formatCurrency(custoEquipe)}</span>
+          </div>
+        )}
+        {custoDeslocamentoInterno > 0 && (
+          <div className="flex justify-between">
+            <span>Custo de combustível/deslocamento</span>
+            <span className="font-medium">− {formatCurrency(custoDeslocamentoInterno)}</span>
+          </div>
+        )}
         {servico.custo_mao_de_obra > 0 && (
           <div className="flex justify-between">
-            <span>Custo da equipe / despesas</span>
+            <span>Outras despesas</span>
             <span className="font-medium">− {formatCurrency(servico.custo_mao_de_obra)}</span>
           </div>
         )}

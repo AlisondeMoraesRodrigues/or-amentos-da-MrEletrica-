@@ -1,9 +1,29 @@
 # STATUS DO PROJETO — MR ORÇAMENTOS
 
 Empresa: **MR ELÉTRICA**
-Última atualização: **2026-09-10**
+Última atualização: **2026-09-14**
 
 ## CHECKPOINT ATUAL
+
+**Checkpoint 27 — Novo Serviço Inteligente** · 🟡 CONCLUÍDO — aguardando o
+usuário rodar a migration no Supabase real
+
+`/servicos/novo` passou a ser o ponto de entrada principal: cliente (buscar ou
+cadastrar na hora, sem perder o que já foi digitado), foto da nota de
+materiais (câmera/galeria) com leitura, catálogo com histórico de preços e
+preço de referência configurável, equipe com diária, deslocamento/combustível
+e um resumo com lucro estimado ao vivo. Build/lint/typecheck sem erros;
+testado a fundo em modo demonstração (não foi possível testar no Supabase
+real do usuário nesta sessão). Detalhes completos: `CHECKPOINT.md`.
+
+**Pendência no Supabase (usuário):** rodar
+`supabase/migrations/20260914120000_notas_materiais_equipe_deslocamento.sql`
+(ou `setup-completo.sql` de novo) — sem isso, salvar serviço/material/orçamento
+com os campos novos falha.
+
+**Aguardando autorização do usuário para o próximo checkpoint** (inclui a
+análise do "segundo prompt": leitura real de imagem da nota, múltiplos
+documentos numa foto, detecção de duplicidade).
 
 **Checkpoint 26 — Botão flutuante "+ Novo" (FAB)** · 🟢 CONCLUÍDO
 

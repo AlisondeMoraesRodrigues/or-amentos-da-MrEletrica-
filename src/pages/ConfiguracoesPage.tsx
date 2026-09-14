@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import { Loading } from '@/components/ui/Loading'
 import { TextField } from '@/components/ui/TextField'
+import { SelectField } from '@/components/ui/SelectField'
 import { useAsync } from '@/hooks/useAsync'
 import { getConfiguracao, updateConfiguracao } from '@/services/configuracoesService'
-import type { ConfiguracaoRow } from '@/types/database'
+import { PRECO_REFERENCIA_META, PRECO_REFERENCIA_ORDEM } from '@/config/material'
+import type { ConfiguracaoRow, PrecoReferencia } from '@/types/database'
 
 type Texto =
   | 'empresa_nome'
@@ -26,8 +28,11 @@ type Numero =
   | 'valor_hora_noturna'
   | 'margem_padrao_materiais'
   | 'taxa_deslocamento'
+  | 'diaria_padrao'
+  | 'gasto_semanal_camionete'
 
-type Form = Record<Texto, string> & Record<Numero, string>
+type Form = Record<Texto, string> &
+  Record<Numero, string> & { preco_referencia_material: PrecoReferencia }
 
 function num(v: string): number {
   const n = Number.parseFloat(v.replace(',', '.'))
@@ -51,6 +56,9 @@ function paraForm(c: ConfiguracaoRow): Form {
     valor_hora_noturna: String(c.valor_hora_noturna ?? 0),
     margem_padrao_materiais: String(c.margem_padrao_materiais ?? 20),
     taxa_deslocamento: String(c.taxa_deslocamento ?? 0),
+    diaria_padrao: String(c.diaria_padrao ?? 130),
+    gasto_semanal_camionete: String(c.gasto_semanal_camionete ?? 0),
+    preco_referencia_material: c.preco_referencia_material ?? 'maior',
   }
 }
 
@@ -90,6 +98,9 @@ export default function ConfiguracoesPage() {
         valor_hora_noturna: num(form.valor_hora_noturna),
         margem_padrao_materiais: num(form.margem_padrao_materiais),
         taxa_deslocamento: num(form.taxa_deslocamento),
+        diaria_padrao: num(form.diaria_padrao),
+        gasto_semanal_camionete: num(form.gasto_semanal_camionete),
+        preco_referencia_material: form.preco_referencia_material,
       })
       setMsg({ tone: 'success', texto: 'Configurações salvas.' })
       reload()
@@ -163,7 +174,29 @@ export default function ConfiguracoesPage() {
           {n('Valor hora noturna (R$)', 'valor_hora_noturna')}
           {n('Margem padrão sobre materiais (%)', 'margem_padrao_materiais')}
           {n('Taxa de deslocamento (R$)', 'taxa_deslocamento')}
+          {n('Diária padrão da equipe (R$)', 'diaria_padrao')}
+          {n('Gasto semanal da camionete (R$)', 'gasto_semanal_camionete')}
         </div>
+      </Card>
+
+      <Card className="space-y-3">
+        <h2 className="text-sm font-semibold text-slate-700">Preço de referência do material</h2>
+        <p className="text-xs text-slate-400">
+          Ao ler uma nota, o valor sugerido ao cliente parte deste preço + a margem acima — o
+          custo real pago continua guardado separadamente.
+        </p>
+        <SelectField
+          label="Usar como referência"
+          name="preco_referencia_material"
+          value={form.preco_referencia_material}
+          onChange={(e) => set('preco_referencia_material', e.target.value)}
+        >
+          {PRECO_REFERENCIA_ORDEM.map((p) => (
+            <option key={p} value={p}>
+              {PRECO_REFERENCIA_META[p]}
+            </option>
+          ))}
+        </SelectField>
       </Card>
 
       <Card className="space-y-3">

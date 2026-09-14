@@ -1,4 +1,4 @@
-import type { MaterialUnidade } from '@/types/database'
+import type { MaterialUnidade, PrecoReferencia } from '@/types/database'
 
 export const UNIDADE_LABEL: Record<MaterialUnidade, string> = {
   un: 'Unidade',
@@ -19,3 +19,20 @@ export const MARGEM_PADRAO = 20
 
 /** Opções rápidas de margem. */
 export const MARGENS_PRESET = [0, 10, 20, 30, 40] as const
+
+/** Como sugerir o preço de venda a partir do histórico de compras (CP27). */
+export const PRECO_REFERENCIA_META: Record<PrecoReferencia, string> = {
+  ultimo: 'Último preço pago',
+  medio: 'Preço médio',
+  maior: 'Maior preço histórico',
+  menor: 'Menor preço histórico',
+  personalizado: 'Personalizado',
+}
+
+export const PRECO_REFERENCIA_ORDEM: PrecoReferencia[] = [
+  'maior',
+  'ultimo',
+  'medio',
+  'menor',
+  'personalizado',
+]

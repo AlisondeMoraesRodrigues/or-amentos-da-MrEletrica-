@@ -64,6 +64,9 @@ export async function createMaterial(input: NovoMaterial): Promise<MaterialRow> 
       foto_path: input.foto_path ?? null,
       foto_nome: input.foto_nome ?? null,
       foto_tipo: input.foto_tipo ?? null,
+      codigo: input.codigo ?? null,
+      sku: input.sku ?? null,
+      material_catalogo_id: input.material_catalogo_id ?? null,
       created_at: ts,
       updated_at: ts,
     }

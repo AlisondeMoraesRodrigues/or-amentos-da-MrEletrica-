@@ -83,8 +83,8 @@ const switchingStorage = {
  * chamadas reais só devem ocorrer quando isSupabaseConfigured === true.
  */
 export const supabase: SupabaseClient = createClient(
-  url ?? 'https://placeholder.supabase.co',
-  anonKey ?? 'placeholder-anon-key',
+  url || 'https://placeholder.supabase.co',
+  anonKey || 'placeholder-anon-key',
   {
     auth: {
       persistSession: true,

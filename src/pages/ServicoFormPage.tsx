@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -12,6 +12,11 @@ import { useAsync } from '@/hooks/useAsync'
 import { listClientes } from '@/services/clientesService'
 import { getConfiguracao } from '@/services/configuracoesService'
 import { createServico, getServico, updateServico, type NovoServico } from '@/services/servicosService'
+import { listMateriais, deleteMaterial } from '@/services/materiaisService'
+import { ClienteSeletor } from '@/components/cliente/ClienteSeletor'
+import { ClienteQuickCreateModal } from '@/components/cliente/ClienteQuickCreateModal'
+import { NotaMaterialCapture } from '@/components/servico/NotaMaterialCapture'
+import { EquipeServicoEditor } from '@/components/servico/EquipeServicoEditor'
 import {
   FORMA_COBRANCA_META,
   FORMA_COBRANCA_ORDEM,
@@ -25,7 +30,14 @@ import { calcularMaoDeObra } from '@/utils/maoDeObra'
 import { calcularLucro } from '@/utils/lucro'
 import { AIService } from '@/services/aiService'
 import { formatCurrency, formatNumber } from '@/utils/format'
-import type { FormaCobranca, ServicoStatus, TipoHora } from '@/types/database'
+import type {
+  ClienteRow,
+  FormaCobranca,
+  MaterialRow,
+  ServicoFuncionarioRow,
+  ServicoStatus,
+  TipoHora,
+} from '@/types/database'
 
 type Campos = {
   cliente_id: string
@@ -44,6 +56,11 @@ type Campos = {
   custo_mao_de_obra: string
   taxa_deslocamento: string
   outros_custos: string
+  km_inicial: string
+  km_final: string
+  combustivel_valor: string
+  pedagio: string
+  estacionamento_valor: string
   status: ServicoStatus
 }
 
@@ -66,6 +83,11 @@ const VAZIO: Campos = {
   custo_mao_de_obra: '',
   taxa_deslocamento: '',
   outros_custos: '',
+  km_inicial: '',
+  km_final: '',
+  combustivel_valor: '',
+  pedagio: '',
+  estacionamento_valor: '',
   status: 'aberto',
 }
 
@@ -100,6 +122,16 @@ export default function ServicoFormPage() {
   const [salvando, setSalvando] = useState(false)
   const [gerandoDescricao, setGerandoDescricao] = useState(false)
 
+  // Rascunho: o serviço pode ser criado "por baixo dos panos" assim que o
+  // usuário adiciona uma foto de material ou um funcionário — sem isso, não
+  // haveria onde vincular essas informações antes de "Salvar serviço".
+  const [servicoIdAtual, setServicoIdAtual] = useState<string | null>(id ?? null)
+  const [materiais, setMateriais] = useState<MaterialRow[]>([])
+  const [equipe, setEquipe] = useState<ServicoFuncionarioRow[]>([])
+  const [mostrarNovoCliente, setMostrarNovoCliente] = useState(false)
+  const [nomeClienteDigitado, setNomeClienteDigitado] = useState('')
+  const [clientesExtras, setClientesExtras] = useState<ClienteRow[]>([])
+
   useEffect(() => {
     if (!id) return
     let ativo = true
@@ -129,8 +161,14 @@ export default function ServicoFormPage() {
           custo_mao_de_obra: s.custo_mao_de_obra ? String(s.custo_mao_de_obra) : '',
           taxa_deslocamento: s.taxa_deslocamento ? String(s.taxa_deslocamento) : '',
           outros_custos: s.outros_custos ? String(s.outros_custos) : '',
+          km_inicial: s.km_inicial ? String(s.km_inicial) : '',
+          km_final: s.km_final ? String(s.km_final) : '',
+          combustivel_valor: s.combustivel_valor ? String(s.combustivel_valor) : '',
+          pedagio: s.pedagio ? String(s.pedagio) : '',
+          estacionamento_valor: s.estacionamento_valor ? String(s.estacionamento_valor) : '',
           status: s.status,
         })
+        setServicoIdAtual(s.id)
       })
       .catch((e: unknown) =>
         setErroCarga(e instanceof Error ? e.message : 'Não foi possível carregar o serviço.'),
@@ -146,6 +184,40 @@ export default function ServicoFormPage() {
   function set<K extends keyof Campos>(chave: K, valor: Campos[K]) {
     setCampos((c) => ({ ...c, [chave]: valor }))
   }
+
+  const recarregarMateriais = useCallback(() => {
+    if (!servicoIdAtual) return
+    listMateriais({ servicoId: servicoIdAtual }).then(setMateriais).catch(() => undefined)
+  }, [servicoIdAtual])
+
+  useEffect(() => {
+    recarregarMateriais()
+  }, [recarregarMateriais])
+
+  async function handleExcluirMaterial(materialId: string) {
+    if (!window.confirm('Remover este material?')) return
+    try {
+      await deleteMaterial(materialId)
+      recarregarMateriais()
+    } catch (err) {
+      setErroGeral(err instanceof Error ? err.message : 'Não foi possível remover o material.')
+    }
+  }
+
+  /** Cria o serviço em segundo plano na primeira vez que algo precisa de um id
+   * (foto de material, funcionário) — assim nada digitado se perde. */
+  const ensureServicoDraft = useCallback(async (): Promise<string> => {
+    if (servicoIdAtual) return servicoIdAtual
+    const criado = await createServico({
+      cliente_id: campos.cliente_id || null,
+      descricao: campos.descricao.trim(),
+      descricao_livre: limpar(campos.descricao_livre),
+      data_servico: campos.data_servico || null,
+      status: campos.status,
+    })
+    setServicoIdAtual(criado.id)
+    return criado.id
+  }, [servicoIdAtual, campos.cliente_id, campos.descricao, campos.descricao_livre, campos.data_servico, campos.status])
 
   const resultado = useMemo(() => {
     if (!apoio) return null
@@ -190,15 +262,24 @@ export default function ServicoFormPage() {
 
   const formaMeta = FORMA_COBRANCA_META[campos.forma_cobranca]
 
-  // Lucro só da mão de obra (materiais entram no resultado da tela do serviço).
-  const lucroMaoDeObra = resultado
+  const materiaisCobrado = materiais.reduce((s, m) => s + m.valor_cobrado * m.quantidade, 0)
+  const materiaisCusto = materiais.reduce((s, m) => s + m.valor_custo * m.quantidade, 0)
+  const custoEquipe = equipe.reduce((s, e) => s + e.custo, 0)
+  const custoDeslocamentoInterno =
+    num(campos.combustivel_valor) + num(campos.pedagio) + num(campos.estacionamento_valor)
+  const kmRodados =
+    campos.km_inicial.trim() && campos.km_final.trim()
+      ? Math.max(0, num(campos.km_final) - num(campos.km_inicial))
+      : null
+
+  const resumo = resultado
     ? calcularLucro({
         maoDeObraCobrada: resultado.valorMaoDeObra,
-        materiaisCobrado: 0,
-        materiaisCusto: 0,
+        materiaisCobrado,
+        materiaisCusto,
         deslocamento: num(campos.taxa_deslocamento),
         outrosCustos: num(campos.outros_custos),
-        custoMaoDeObra: num(campos.custo_mao_de_obra),
+        custoMaoDeObra: num(campos.custo_mao_de_obra) + custoEquipe + custoDeslocamentoInterno,
       })
     : null
 
@@ -255,19 +336,32 @@ export default function ServicoFormPage() {
       valor_mao_de_obra: resultado.valorMaoDeObra,
       taxa_deslocamento: num(campos.taxa_deslocamento),
       outros_custos: num(campos.outros_custos),
+      km_inicial: campos.km_inicial.trim() ? num(campos.km_inicial) : null,
+      km_final: campos.km_final.trim() ? num(campos.km_final) : null,
+      combustivel_valor: num(campos.combustivel_valor),
+      pedagio: num(campos.pedagio),
+      estacionamento_valor: num(campos.estacionamento_valor),
       status: campos.status,
     }
 
     setSalvando(true)
     try {
-      const salvo = id ? await updateServico(id, payload) : await createServico(payload)
-      navigate(`/servicos/${salvo.id}`, { replace: true })
+      const salvo = servicoIdAtual
+        ? await updateServico(servicoIdAtual, payload)
+        : await createServico(payload)
+      navigate(`/servicos/${salvo.id}`, { replace: true, state: { salvo: true } })
     } catch (err) {
       setErroGeral(err instanceof Error ? err.message : 'Não foi possível salvar o serviço.')
     } finally {
       setSalvando(false)
     }
   }
+
+  const clientes = useMemo(() => {
+    const base = apoio?.clientes ?? []
+    const extrasNovos = clientesExtras.filter((c) => !base.some((b) => b.id === c.id))
+    return [...extrasNovos, ...base]
+  }, [apoio, clientesExtras])
 
   if (carregando || carregandoApoio) return <Loading label="Carregando…" />
 
@@ -283,8 +377,6 @@ export default function ServicoFormPage() {
     )
   }
 
-  const clientes = apoio?.clientes ?? []
-
   return (
     <div className="space-y-4">
       <PageHeader
@@ -294,29 +386,29 @@ export default function ServicoFormPage() {
 
       {erroGeral && <Alert tone="error">{erroGeral}</Alert>}
 
+      {mostrarNovoCliente && (
+        <ClienteQuickCreateModal
+          nomeInicial={nomeClienteDigitado}
+          onCancelar={() => setMostrarNovoCliente(false)}
+          onCriado={(cliente) => {
+            setClientesExtras((lista) => [cliente, ...lista])
+            set('cliente_id', cliente.id)
+            setMostrarNovoCliente(false)
+          }}
+        />
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4" noValidate>
         <Card className="space-y-3">
-          <SelectField
-            label="Cliente"
-            name="cliente_id"
+          <ClienteSeletor
+            clientes={clientes}
             value={campos.cliente_id}
-            onChange={(e) => set('cliente_id', e.target.value)}
-          >
-            <option value="">— Sem cliente —</option>
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-              </option>
-            ))}
-          </SelectField>
-          {clientes.length === 0 && (
-            <p className="text-xs text-slate-400">
-              Nenhum cliente cadastrado.{' '}
-              <Link to="/clientes/novo" className="font-semibold text-brand-600 underline">
-                Cadastrar cliente
-              </Link>
-            </p>
-          )}
+            onChange={(cid) => set('cliente_id', cid)}
+            onNovoCliente={(nomeDigitado) => {
+              setNomeClienteDigitado(nomeDigitado)
+              setMostrarNovoCliente(true)
+            }}
+          />
 
           <TextAreaField
             label="Descrição do serviço *"
@@ -363,6 +455,120 @@ export default function ServicoFormPage() {
               ))}
             </SelectField>
           </div>
+        </Card>
+
+        <NotaMaterialCapture
+          servicoId={servicoIdAtual}
+          onNeedServicoId={ensureServicoDraft}
+          onMateriaisSalvos={recarregarMateriais}
+          precoReferenciaConfig={apoio?.config.preco_referencia_material ?? 'maior'}
+          margemPadrao={apoio?.config.margem_padrao_materiais ?? 20}
+        />
+
+        {materiais.length > 0 && (
+          <Card className="space-y-2">
+            <h2 className="text-sm font-semibold text-slate-700">Materiais adicionados ({materiais.length})</h2>
+            <ul className="divide-y divide-slate-100">
+              {materiais.map((m) => (
+                <li key={m.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate text-ink-900">{m.nome}</p>
+                    <p className="text-xs text-slate-400">
+                      {m.quantidade} {m.unidade} × {formatCurrency(m.valor_cobrado)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="font-medium">{formatCurrency(m.valor_cobrado * m.quantidade)}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleExcluirMaterial(m.id)}
+                      className="text-xs font-semibold text-red-600 underline"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-between border-t border-slate-100 pt-2 text-sm font-bold text-ink-900">
+              <span>Total materiais</span>
+              <span>{formatCurrency(materiaisCobrado)}</span>
+            </div>
+          </Card>
+        )}
+
+        <EquipeServicoEditor
+          servicoId={servicoIdAtual}
+          onNeedServicoId={ensureServicoDraft}
+          diariaPadrao={apoio?.config.diaria_padrao ?? 130}
+          onEquipeChange={setEquipe}
+        />
+
+        <Card className="space-y-3">
+          <h2 className="text-sm font-semibold text-slate-700">🚚 Deslocamento e combustível</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField
+              label="KM inicial"
+              type="number"
+              min={0}
+              step="0.1"
+              inputMode="decimal"
+              value={campos.km_inicial}
+              onChange={(e) => set('km_inicial', e.target.value)}
+            />
+            <TextField
+              label="KM final"
+              type="number"
+              min={0}
+              step="0.1"
+              inputMode="decimal"
+              value={campos.km_final}
+              onChange={(e) => set('km_final', e.target.value)}
+            />
+          </div>
+          {kmRodados !== null && (
+            <p className="text-xs text-slate-400">{formatNumber(kmRodados, 1)} km rodados.</p>
+          )}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <TextField
+              label="Combustível (R$)"
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={campos.combustivel_valor}
+              onChange={(e) => set('combustivel_valor', e.target.value)}
+            />
+            <TextField
+              label="Pedágio (R$)"
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={campos.pedagio}
+              onChange={(e) => set('pedagio', e.target.value)}
+            />
+            <TextField
+              label="Estacionamento (R$)"
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              value={campos.estacionamento_valor}
+              onChange={(e) => set('estacionamento_valor', e.target.value)}
+            />
+          </div>
+          {apoio && apoio.config.gasto_semanal_camionete > 0 && (
+            <p className="text-xs text-slate-400">
+              Orçamento semanal da camionete: {formatCurrency(apoio.config.gasto_semanal_camionete)}{' '}
+              (ajuste em Configurações). Esse valor não é lançado automaticamente aqui.
+            </p>
+          )}
+          {custoDeslocamentoInterno > 0 && (
+            <p className="text-sm font-semibold text-ink-900">
+              Custo de deslocamento: {formatCurrency(custoDeslocamentoInterno)}
+            </p>
+          )}
         </Card>
 
         <Card className="space-y-3">
@@ -543,10 +749,10 @@ export default function ServicoFormPage() {
         </Card>
 
         <Card className="space-y-3">
-          <h2 className="text-sm font-semibold text-slate-700">Custos e lucro</h2>
+          <h2 className="text-sm font-semibold text-slate-700">Outros custos</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <TextField
-              label="Taxa de deslocamento (R$)"
+              label="Taxa de deslocamento cobrada (R$)"
               name="taxa_deslocamento"
               type="number"
               min={0}
@@ -567,7 +773,7 @@ export default function ServicoFormPage() {
             />
           </div>
           <TextField
-            label="Custo da equipe / despesas (R$) — o que você paga, não cobra"
+            label="Outras despesas (R$) — o que você paga, não cobra do cliente"
             name="custo_mao_de_obra"
             type="number"
             min={0}
@@ -576,39 +782,84 @@ export default function ServicoFormPage() {
             value={campos.custo_mao_de_obra}
             onChange={(e) => set('custo_mao_de_obra', e.target.value)}
           />
-          {lucroMaoDeObra && (
-            <div className="space-y-1 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-              <div className="flex justify-between">
-                <span>Recebido (mão de obra + deslocamento + outros)</span>
-                <span className="font-medium">{formatCurrency(lucroMaoDeObra.receita)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Custo da equipe / despesas</span>
-                <span className="font-medium">− {formatCurrency(lucroMaoDeObra.custo)}</span>
-              </div>
-              <div className="flex justify-between border-t border-emerald-200 pt-1 font-bold">
-                <span>Lucro da mão de obra ({formatNumber(lucroMaoDeObra.margemPct, 1)}%)</span>
-                <span>{formatCurrency(lucroMaoDeObra.lucro)}</span>
-              </div>
-              <p className="text-xs text-emerald-700">
-                O lucro dos materiais aparece na tela do serviço, junto com o total geral.
-              </p>
-            </div>
-          )}
         </Card>
+
+        {resumo && (
+          <Card className="space-y-1">
+            <h2 className="mb-1 text-sm font-semibold text-slate-700">Resumo</h2>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Cliente</span>
+              <span className="font-medium text-ink-900">
+                {clientes.find((c) => c.id === campos.cliente_id)?.nome ?? 'Sem cliente'}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Materiais</span>
+              <span className="font-medium">{formatCurrency(materiaisCobrado)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Mão de obra</span>
+              <span className="font-medium">{formatCurrency(resultado?.valorMaoDeObra ?? 0)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Deslocamento cobrado</span>
+              <span className="font-medium">{formatCurrency(num(campos.taxa_deslocamento))}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">Outros custos cobrados</span>
+              <span className="font-medium">{formatCurrency(num(campos.outros_custos))}</span>
+            </div>
+            <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-bold text-ink-900">
+              <span>Valor total (cliente)</span>
+              <span>{formatCurrency(resumo.receita)}</span>
+            </div>
+
+            <div className="mt-3 space-y-1 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                Só para você
+              </p>
+              <div className="flex justify-between">
+                <span>Custo dos materiais</span>
+                <span className="font-medium">{formatCurrency(materiaisCusto)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Custo da equipe</span>
+                <span className="font-medium">{formatCurrency(custoEquipe)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Custo de combustível/deslocamento</span>
+                <span className="font-medium">{formatCurrency(custoDeslocamentoInterno)}</span>
+              </div>
+              {num(campos.custo_mao_de_obra) > 0 && (
+                <div className="flex justify-between">
+                  <span>Outras despesas</span>
+                  <span className="font-medium">{formatCurrency(num(campos.custo_mao_de_obra))}</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-emerald-200 pt-1 font-semibold">
+                <span>Custo total</span>
+                <span>{formatCurrency(resumo.custo)}</span>
+              </div>
+              <div className="flex justify-between border-t border-emerald-200 pt-1 text-base font-bold">
+                <span>Resultado estimado ({formatNumber(resumo.margemPct, 1)}%)</span>
+                <span>{formatCurrency(resumo.lucro)}</span>
+              </div>
+            </div>
+          </Card>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Button
             type="button"
             variant="ghost"
             fullWidth
-            onClick={() => navigate(id ? `/servicos/${id}` : '/servicos')}
+            onClick={() => navigate(servicoIdAtual ? `/servicos/${servicoIdAtual}` : '/servicos')}
             disabled={salvando}
           >
             Cancelar
           </Button>
           <Button type="submit" fullWidth disabled={salvando}>
-            {salvando ? 'Salvando…' : 'Salvar serviço'}
+            {salvando ? 'Salvando…' : '💾 Salvar serviço'}
           </Button>
         </div>
       </form>
