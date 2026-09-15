@@ -2024,3 +2024,87 @@ obra → Resumo → Salvar).
 `npm run build` / `npm run lint` / `npx tsc` — 0 erros.
 
 Arquivo modificado: `src/pages/ServicoFormPage.tsx`.
+
+---
+
+# CHECKPOINT 28 — LEITURA AUTOMÁTICA DA FOTO/PDF DA NOTA
+
+> Pedido: "quero que o sistema leia a foto e o PDF automaticamente".
+
+Até aqui (CP27), depois de tirar a foto o técnico precisava digitar/colar o
+texto da nota. Agora o app tenta ler a foto (ou PDF) sozinho e já mostra os
+itens pra conferência — só cai pro modo manual se a leitura automática não
+estiver configurada ou falhar.
+
+## Como funciona
+
+- Nova Edge Function `supabase/functions/ler-nota/` — reaproveita o Google
+  Gemini (mesma chave `GEMINI_API_KEY` já usada em `gerar-descricao`, CP24;
+  faixa gratuita), agora com **visão**: recebe a foto/PDF e devolve JSON
+  estruturado (loja, CNPJ, documento, data, vendedor, cliente, itens com
+  nome/código/marca/quantidade/unidade/valores, total de produtos, desconto,
+  total). **Genérica** — não é feita pra uma loja específica.
+- **Conferência matemática**: cada item vem marcado `conferido: false` quando
+  quantidade × valor unitário não bate com o total lido — a tela de
+  conferência destaca esse item em amarelo com um aviso, mas continua editável.
+- `src/services/ocrService.ts` ganhou `lerEstruturado()` (contrato modular,
+  igual ao `aiService` — dá pra trocar de provedor sem mexer nas telas).
+- `src/services/ocrSetup.ts` (novo, importado no `main.tsx`) registra esse
+  provedor quando o Supabase está configurado.
+- `NotaMaterialCapture`: depois de "Usar esta foto", tenta ler automaticamente
+  (`🔎 Lendo a nota automaticamente…`); se conseguir, pula direto pra
+  conferência com loja/documento/data já preenchidos; se não, cai no fluxo
+  manual de sempre (digitar o texto) — **nada quebra** se a função não
+  estiver publicada.
+- Aceita agora **foto ou PDF** na galeria (a câmera continua só foto, como já
+  é padrão do navegador).
+
+## Limitação conhecida (documentada, não escondida)
+
+- Se a foto tiver **mais de uma nota junto**, o modelo lê só a **primeira** e
+  ignora as demais — ainda não separa automaticamente em vários registros.
+  Seria um refinamento futuro (recortar/segmentar a imagem em várias notas).
+
+## Banco de dados
+
+Nenhuma migration nova — usa exatamente as tabelas do CP27
+(`materiais_catalogo`, `materiais_compras`, `lojas`, `notas_fiscais`).
+
+## Arquivos criados
+
+```
+supabase/functions/ler-nota/index.ts
+supabase/functions/ler-nota/README.md
+src/services/ocrSetup.ts
+```
+
+## Arquivos modificados
+
+```
+src/services/ocrService.ts            + lerEstruturado()/podeLerEstruturado()/NotaLida
+src/components/servico/NotaMaterialCapture.tsx   leitura automática + aviso de conferência + aceita PDF
+src/main.tsx                          + import './services/ocrSetup'
+CHECKPOINT.md / PROJECT_STATUS.md
+```
+
+## Testes executados
+
+| Teste | Resultado |
+| ----- | --------- |
+| `npm run build` / `npm run lint` / `npx tsc` | ✅ 0 erros / 0 warnings |
+| Modo demonstração: sem provedor de leitura automática registrado (esperado, pois não usa Supabase real) → fluxo cai direto no manual (digitar texto), igual antes | ✅ sem regressão |
+| Fluxo manual completo (foto → texto → extrair → conferir → salvar) | ✅ continua funcionando, 1 material salvo corretamente |
+| Input da galeria aceita `image/*` e `application/pdf` | ✅ |
+| **Não foi possível testar a leitura automática de verdade nesta sessão** — depende da Edge Function publicada no Supabase real do usuário (chave já existe se `gerar-descricao` foi publicada) | ⏳ aguardando teste do usuário |
+
+## Pendência para o usuário
+
+Publicar a Edge Function `ler-nota` (só isso — sem SQL novo):
+1. Supabase → **Edge Functions** → **Deploy a new function** → nome `ler-nota`
+2. Colar o conteúdo de `supabase/functions/ler-nota/index.ts` → **Deploy**
+3. Se a secret `GEMINI_API_KEY` já existir (por causa da `gerar-descricao`), não precisa fazer mais nada.
+
+Depois disso, ao tirar uma foto de uma nota real, o app deve mostrar
+"🔎 Lendo a nota automaticamente…" e já entregar os itens pra conferência.
+
+🟡 **CHECKPOINT 28 CONCLUÍDO — AGUARDANDO PUBLICAÇÃO DA EDGE FUNCTION E TESTE COM NOTA REAL.**

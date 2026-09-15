@@ -5,8 +5,18 @@ Empresa: **MR ELÉTRICA**
 
 ## CHECKPOINT ATUAL
 
-**Checkpoint 27 — Novo Serviço Inteligente** · 🟡 CONCLUÍDO — aguardando o
-usuário rodar a migration no Supabase real
+**Checkpoint 28 — Leitura automática da foto/PDF da nota** · 🟡 CONCLUÍDO —
+aguardando o usuário publicar a Edge Function `ler-nota`
+
+A tela "Novo serviço" agora tenta **ler a foto/PDF da nota sozinha** (Google
+Gemini com visão, mesma chave gratuita da `gerar-descricao`) e já mostra os
+itens pra conferência — cai no fluxo manual (digitar o texto) se a função não
+estiver publicada. Itens com conta que não bate (qtd × valor ≠ total) ficam
+destacados em amarelo. Sem migration nova. Build/lint/typecheck sem erros.
+Detalhes: `CHECKPOINT.md`.
+
+**Checkpoint 27 — Novo Serviço Inteligente** · 🟢 CONCLUÍDO (migration já
+rodada e código publicado pelo usuário)
 
 `/servicos/novo` passou a ser o ponto de entrada principal: cliente (buscar ou
 cadastrar na hora, sem perder o que já foi digitado), foto da nota de

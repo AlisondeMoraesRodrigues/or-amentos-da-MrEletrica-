@@ -34,10 +34,38 @@ export interface ResultadoLeituraNota {
   totalNota?: number
 }
 
+/** Item já estruturado, lido diretamente da foto/PDF (Checkpoint 28). */
+export interface ItemNotaLido {
+  nome: string
+  codigo: string | null
+  marca: string | null
+  quantidade: number
+  unidade: MaterialUnidade
+  valorUnitario: number
+  valorTotal: number
+  /** false = quantidade × valor unitário não bate com o total lido (conferir). */
+  conferido: boolean
+}
+
+export interface NotaLida {
+  loja: string | null
+  cnpjLoja: string | null
+  documento: string | null
+  data: string | null
+  vendedor: string | null
+  cliente: string | null
+  itens: ItemNotaLido[]
+  totalProdutos: number | null
+  desconto: number | null
+  total: number | null
+}
+
 export interface OCRProvider {
   readonly nome: string
   /** Converte a imagem/arquivo em texto. Ausente = o usuário informa o texto. */
   extrairTexto?(arquivo: Blob): Promise<string>
+  /** Lê a foto/PDF e já devolve os dados estruturados (loja, itens, totais). */
+  lerEstruturado?(arquivo: Blob): Promise<NotaLida>
 }
 
 /** Provedor padrão: sem OCR de imagem (o usuário digita/cola o texto da nota). */
@@ -141,5 +169,15 @@ export const OCRService = {
   },
   interpretar(texto: string): ResultadoLeituraNota {
     return interpretarTextoNota(texto)
+  },
+  /** true quando o provedor atual sabe ler a foto/PDF e devolver os dados prontos. */
+  podeLerEstruturado(): boolean {
+    return typeof provider.lerEstruturado === 'function'
+  },
+  async lerEstruturado(arquivo: Blob): Promise<NotaLida> {
+    if (!provider.lerEstruturado) {
+      throw new Error('Leitura automática não está ativada. Digite o texto da nota manualmente.')
+    }
+    return provider.lerEstruturado(arquivo)
   },
 }

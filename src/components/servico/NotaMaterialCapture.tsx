@@ -32,6 +32,8 @@ interface ItemEditavel {
   unidade: MaterialUnidade
   valorUnitario: string
   valorSugerido: string
+  /** false = a leitura automática achou que qtd × valor não bate com o total (conferir). */
+  conferido: boolean
 }
 
 function num(v: string): number {
@@ -39,7 +41,7 @@ function num(v: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
-type Etapa = 'inicio' | 'preview' | 'texto' | 'conferencia'
+type Etapa = 'inicio' | 'preview' | 'lendo' | 'texto' | 'conferencia'
 
 export function NotaMaterialCapture({
   servicoId,
@@ -70,6 +72,9 @@ export function NotaMaterialCapture({
   const [enviando, setEnviando] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [lidoAutomaticamente, setLidoAutomaticamente] = useState(false)
+  const [dataLida, setDataLida] = useState<string | null>(null)
+  const [documentoLido, setDocumentoLido] = useState<string | null>(null)
 
   function reiniciar() {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
@@ -80,6 +85,9 @@ export function NotaMaterialCapture({
     setTexto('')
     setItens([])
     setErro('')
+    setLidoAutomaticamente(false)
+    setDataLida(null)
+    setDocumentoLido(null)
   }
 
   function handleArquivo(e: ChangeEvent<HTMLInputElement>) {
@@ -101,6 +109,35 @@ export function NotaMaterialCapture({
       const id = servicoId ?? (await onNeedServicoId())
       const nota = await enviarNotaFiscal(arquivo, { servicoId: id })
       setNotaFiscalId(nota.id)
+
+      if (OCRService.podeLerEstruturado()) {
+        setEtapa('lendo')
+        try {
+          const lida = await OCRService.lerEstruturado(arquivo)
+          if (lida.itens.length > 0) {
+            setItens(
+              lida.itens.map((i) => ({
+                id: demoId(),
+                nome: i.nome,
+                codigo: i.codigo ?? '',
+                quantidade: formatNumber(i.quantidade, 3),
+                unidade: i.unidade as MaterialUnidade,
+                valorUnitario: formatNumber(i.valorUnitario),
+                valorSugerido: '',
+                conferido: i.conferido,
+              })),
+            )
+            if (lida.loja) setLoja(lida.loja)
+            setDataLida(lida.data)
+            setDocumentoLido(lida.documento)
+            setLidoAutomaticamente(true)
+            setEtapa('conferencia')
+            return
+          }
+        } catch {
+          /* leitura automática falhou — cai no fluxo manual abaixo */
+        }
+      }
       setEtapa('texto')
     } catch (err) {
       setErro(err instanceof Error ? err.message : 'Não foi possível enviar a foto da nota.')
@@ -120,6 +157,7 @@ export function NotaMaterialCapture({
         unidade: i.unidade,
         valorUnitario: formatNumber(i.valorUnitario),
         valorSugerido: '',
+        conferido: true,
       })),
     )
     setEtapa('conferencia')
@@ -144,6 +182,7 @@ export function NotaMaterialCapture({
         unidade: 'un',
         valorUnitario: '',
         valorSugerido: '',
+        conferido: true,
       },
     ])
   }
@@ -161,7 +200,7 @@ export function NotaMaterialCapture({
     setSalvando(true)
     try {
       const id = servicoId ?? (await onNeedServicoId())
-      const dataCompra = nowIso().slice(0, 10)
+      const dataCompra = dataLida || nowIso().slice(0, 10)
       for (const it of validos) {
         const custoUnit = num(it.valorUnitario)
         const catalogoExistente = await buscarNoCatalogo(it.codigo || null, it.nome).catch(
@@ -229,7 +268,7 @@ export function NotaMaterialCapture({
           <input
             ref={inputGaleriaRef}
             type="file"
-            accept="image/*"
+            accept="image/*,application/pdf"
             className="hidden"
             onChange={handleArquivo}
           />
@@ -276,6 +315,14 @@ export function NotaMaterialCapture({
         </>
       )}
 
+      {etapa === 'lendo' && (
+        <div className="flex flex-col items-center gap-2 py-6 text-center">
+          <span className="text-3xl">🔎</span>
+          <p className="text-sm font-medium text-slate-600">Lendo a nota automaticamente…</p>
+          <p className="text-xs text-slate-400">Isso leva alguns segundos.</p>
+        </div>
+      )}
+
       {etapa === 'texto' && (
         <>
           <Alert tone="success">Foto salva. Agora digite ou cole o texto da nota para ler os itens.</Alert>
@@ -317,6 +364,14 @@ export function NotaMaterialCapture({
 
       {etapa === 'conferencia' && (
         <>
+          {lidoAutomaticamente && (
+            <Alert tone="success">
+              Lido automaticamente
+              {documentoLido ? ` — documento ${documentoLido}` : ''}
+              {dataLida ? ` — ${dataLida}` : ''}. Confira os itens antes de salvar.
+            </Alert>
+          )}
+
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-700">Materiais identificados ({itens.length})</h3>
             <button type="button" onClick={adicionarLinha} className="text-xs font-semibold text-brand-600 underline">
@@ -331,7 +386,17 @@ export function NotaMaterialCapture({
           )}
 
           {itens.map((it) => (
-            <div key={it.id} className="space-y-2 rounded-xl bg-slate-50 p-3">
+            <div
+              key={it.id}
+              className={`space-y-2 rounded-xl p-3 ${
+                it.conferido ? 'bg-slate-50' : 'bg-amber-50 ring-1 ring-amber-300'
+              }`}
+            >
+              {!it.conferido && (
+                <p className="text-xs font-semibold text-amber-700">
+                  ⚠️ Confira: quantidade × valor não bateu com o total lido na nota.
+                </p>
+              )}
               <TextField
                 label="Produto"
                 value={it.nome}
